@@ -565,7 +565,7 @@ function loadState(stateStr) {
   nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
   canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
   renderFavColors();
-  draw(); updateHistoryButtons();
+  scheduleDraw(); updateHistoryButtons();
 }
 
 function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); broadcastState(); } }
@@ -612,7 +612,7 @@ window.addEventListener('resize', resize);
 function cacheImage(base64str) {
   if (imgCache[base64str]) return imgCache[base64str];
   const img = new Image(); img.src = base64str;
-  img.onload = () => draw();
+  img.onload = () => scheduleDraw();
   imgCache[base64str] = img; return img;
 }
 
@@ -836,8 +836,17 @@ function hitGroupResizeHandle(sx, sy, g) {
 function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
   const Lws = (wx, wy) => ({ x: wx * sc + px, y: wy * sc + py });
 
+  // Pre-build id→node map for O(1) link lookups
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+
+  // Viewport bounds in world space (with padding so edges don't pop)
+  const pad = 200 / sc;
+  const vx0 = -px / sc - pad, vy0 = -py / sc - pad;
+  const vx1 = (W - px) / sc + pad, vy1 = (H - py) / sc + pad;
+  const inView = (x, y, w, h) => isExport || (x + w > vx0 && x < vx1 && y + h > vy0 && y < vy1);
+
   // 0. Draw Group Boxes (background, behind everything)
-  groups.forEach(g => drawGroup(ctx, g, sc, px, py, isExport));
+  groups.forEach(g => { if (inView(g.x, g.y, g.w, g.h)) drawGroup(ctx, g, sc, px, py, isExport); });
 
   // 1. Draw Brush Strokes (Including Erased Areas)
   ctx.save();
@@ -949,22 +958,18 @@ function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
     }
   });
 
-  // 3. Draw Connection Links
+  // 3. Draw Connection Links (O(1) lookup via nodeById map)
   links.forEach(l => {
-    const n1 = nodes.find(n => n.id === l.from);
-    const n2 = nodes.find(n => n.id === l.to);
+    const n1 = nodeById.get(l.from), n2 = nodeById.get(l.to);
     if (n1 && n2) {
       const p1 = Lws(n1.x + n1.w, n1.y + n1.h / 2);
       const p2 = Lws(n2.x, n2.y + n2.h / 2);
-      
-      // Dynamic styling rules: Incomplete targets override to dashed/dotted connection pipelines
-      const targetIncomplete = !n2.complete; 
-      bezConn(ctx, p1.x, p1.y, p2.x, p2.y, targetIncomplete, sc);
+      bezConn(ctx, p1.x, p1.y, p2.x, p2.y, !n2.complete, sc);
     }
   });
 
-  // 4. Draw Milestone Nodes
-  nodes.forEach(n => drawNodeOnCtx(ctx, n, Lws, sc, isExport));
+  // 4. Draw Milestone Nodes (skip off-screen nodes)
+  nodes.forEach(n => { if (inView(n.x, n.y, n.w, n.h || 175)) drawNodeOnCtx(ctx, n, Lws, sc, isExport); });
 }
 
 function bezConn(c, ax, ay, bx, by, dashed, scale) {
@@ -1167,6 +1172,14 @@ function draw() {
   }
 }
 
+// Batch renders to one per animation frame — prevents redundant redraws
+// when multiple events fire in the same frame (mousemove + Firebase, etc.)
+let _rafId = null;
+function scheduleDraw() {
+  if (_rafId !== null) return;
+  _rafId = requestAnimationFrame(() => { _rafId = null; draw(); });
+}
+
 // ═══════════════════════════════════════════════════════════
 // PROCESSING ALGORITHMS
 // ═══════════════════════════════════════════════════════════
@@ -1288,7 +1301,7 @@ cv.addEventListener('mousedown', e => {
     _activeImg = hitImageObj; _imgMode = 'move';
     _imgOffsetX = hitImageObj.x - wm.x;
     _imgOffsetY = hitImageObj.y - wm.y;
-    draw(); return;
+    scheduleDraw(); return;
   }
   
   // C. Fallback processing to Nodes framework
@@ -1330,7 +1343,7 @@ cv.addEventListener('mousedown', e => {
           _groupResizeStart = { x: p.x, y: p.y };
           groups.forEach(g => g.selected = g === _activeGroup);
           nodes.forEach(x => x.selected = false); canvasImages.forEach(x => x.selected = false);
-          draw(); return;
+          scheduleDraw(); return;
         }
       }
       // Check group body
@@ -1351,7 +1364,7 @@ cv.addEventListener('mousedown', e => {
     }
     _selBoxStart = { x: p.x, y: p.y };
   }
-  draw();
+  scheduleDraw();
 });
 
 window.addEventListener('mousemove', e => {
@@ -1363,17 +1376,17 @@ window.addEventListener('mousemove', e => {
   if (_panning) {
     px = _panOrig.px + (p.x - _panStart.x);
     py = _panOrig.py + (p.y - _panStart.y);
-    draw(); return;
+    scheduleDraw(); return;
   }
   
   if (_drawing && _curStroke) {
     _curStroke.points.push(sw(p.x, p.y));
-    broadcastStateLive(); draw(); return;
+    broadcastStateLive(); scheduleDraw(); return;
   }
   
   if (_tempLink) {
     _tempLink.p2 = { x: p.x, y: p.y };
-    draw(); return;
+    scheduleDraw(); return;
   }
   
   if (_activeImg) {
@@ -1399,7 +1412,7 @@ window.addEventListener('mousemove', e => {
       _activeImg.x = cx - _activeImg.w / 2;
       _activeImg.y = cy - _activeImg.h / 2;
     }
-    broadcastStateLive(); draw(); return;
+    broadcastStateLive(); scheduleDraw(); return;
   }
   
   if (_selBoxStart) {
@@ -1407,7 +1420,7 @@ window.addEventListener('mousemove', e => {
       x: Math.min(_selBoxStart.x, p.x), y: Math.min(_selBoxStart.y, p.y),
       w: Math.abs(p.x - _selBoxStart.x), h: Math.abs(p.y - _selBoxStart.y)
     };
-    draw(); return;
+    scheduleDraw(); return;
   }
 
   if (_dn && _dragGroup.length > 0) {
@@ -1417,7 +1430,7 @@ window.addEventListener('mousemove', e => {
       item.node.x = w.x + item.offX;
       item.node.y = w.y + item.offY;
     });
-    broadcastStateLive(); draw();
+    broadcastStateLive(); scheduleDraw();
   }
 
   if (_activeGroup) {
@@ -1428,11 +1441,11 @@ window.addEventListener('mousemove', e => {
       _activeGroup.w = Math.max(80, _groupStartW + (p.x - _groupResizeStart.x) / sc);
       _activeGroup.h = Math.max(60, _groupStartH + (p.y - _groupResizeStart.y) / sc);
     }
-    broadcastStateLive(); draw(); return;
+    broadcastStateLive(); scheduleDraw(); return;
   }
 
   // Keep eraser cursor circle moving even when not drawing
-  if (tool === 'erase') draw();
+  if (tool === 'erase') scheduleDraw();
 });
 
 window.addEventListener('mouseup', e => {
@@ -1457,7 +1470,7 @@ window.addEventListener('mouseup', e => {
         saveState();
       }
     }
-    _tempLink = null; _linkStartNode = null; draw();
+    _tempLink = null; _linkStartNode = null; scheduleDraw();
   }
 
   if (_selBox) {
@@ -1473,7 +1486,7 @@ window.addEventListener('mouseup', e => {
         img.selected = true;
       }
     });
-    _selBox = null; _selBoxStart = null; draw();
+    _selBox = null; _selBoxStart = null; scheduleDraw();
   } else {
     _selBoxStart = null;
   }
@@ -1486,9 +1499,9 @@ cv.addEventListener('contextmenu', e => {
   e.preventDefault();
   const p = cpos(e);
   const n = hitNode(p.x, p.y);
-  if (n) { nodes.forEach(x => x.selected = false); n.selected = true; draw(); showCtxMenu(e.clientX, e.clientY, n); return; }
+  if (n) { nodes.forEach(x => x.selected = false); n.selected = true; scheduleDraw(); showCtxMenu(e.clientX, e.clientY, n); return; }
   const g = hitGroupBody(p.x, p.y);
-  if (g) { groups.forEach(x => x.selected = false); g.selected = true; draw(); showGroupCtxMenu(e.clientX, e.clientY, g); }
+  if (g) { groups.forEach(x => x.selected = false); g.selected = true; scheduleDraw(); showGroupCtxMenu(e.clientX, e.clientY, g); }
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1573,7 +1586,7 @@ function commitEdit() {
   _et.tasks = compiledTasks;
   
   updateNodeText(_et);
-  closeEdit(); saveState(); draw();
+  closeEdit(); saveState(); scheduleDraw();
 }
 
 function closeEdit() { modal.classList.remove('show'); _et = null; }
@@ -1595,7 +1608,7 @@ function addNode() {
   };
   updateNodeText(newNode);
   nodes.push(newNode);
-  saveState(); draw();
+  saveState(); scheduleDraw();
 }
 
 function deleteSelected() {
@@ -1604,7 +1617,7 @@ function deleteSelected() {
   links = links.filter(l => !selNodes.includes(l.from) && !selNodes.includes(l.to));
   canvasImages = canvasImages.filter(img => !img.selected);
   groups = groups.filter(g => !g.selected);
-  saveState(); draw();
+  saveState(); scheduleDraw();
 }
 
 function copySelected() {
@@ -1626,7 +1639,7 @@ function pasteClipboard() {
     const nn = Object.assign({}, n, { id: _id++, x: n.x + dx, y: n.y + dy, selected: true, tasks: (n.tasks || []).map(t => Object.assign({}, t)) });
     updateNodeText(nn); nodes.push(nn);
   });
-  saveState(); draw();
+  saveState(); scheduleDraw();
 }
 
 function dupeSelected() {
@@ -1637,7 +1650,7 @@ function dupeSelected() {
     const nn = Object.assign({}, n, { id: _id++, x: n.x + 20, y: n.y + 20, selected: true, tasks: (n.tasks || []).map(t => Object.assign({}, t)) });
     updateNodeText(nn); nodes.push(nn);
   });
-  saveState(); draw();
+  saveState(); scheduleDraw();
 }
 
 document.addEventListener('keydown', e => {
@@ -1749,7 +1762,7 @@ document.getElementById('fi-canvas-img').addEventListener('change', e => {
         src: base64str, selected: true
       });
       cacheImage(base64str);
-      saveState(); draw();
+      saveState(); scheduleDraw();
     };
     imgObj.src = base64str;
   };
@@ -2074,7 +2087,7 @@ function startFirebase() {
       nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
       canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
       renderFavColors();
-      draw();
+      scheduleDraw();
     } catch(e) { console.error('Failed to apply remote state:', e); }
   });
 
@@ -2091,7 +2104,7 @@ function startFirebase() {
       remoteCursors[uid].color = user.color || '#999';
     });
     updatePresenceBar();
-    draw();
+    scheduleDraw();
   });
 
   // Live cursor positions
@@ -2104,7 +2117,7 @@ function startFirebase() {
         remoteCursors[uid].wy = cur.wy || 0;
       }
     });
-    draw();
+    scheduleDraw();
   });
 }
 
@@ -2154,7 +2167,7 @@ function addFromTemplate(key) {
     selected:true, complete:false, tasks:t.tasks.map(tk => Object.assign({},tk)) };
   updateNodeText(newNode);
   nodes.push(newNode);
-  saveState(); draw();
+  saveState(); scheduleDraw();
 }
 
 // ── Group Box ─────────────────────────────────────────────
@@ -2164,7 +2177,7 @@ function addGroup() {
   const vp = sw(W/2, H/2);
   groups.push({ id: 'g_' + Date.now(), x: vp.x - 150, y: vp.y - 100, w: 300, h: 200, title: 'Group', color: '#4752c4', selected: true });
   groups.slice(0,-1).forEach(g => g.selected = false);
-  saveState(); draw();
+  saveState(); scheduleDraw();
 }
 
 function openGroupEdit(g) {
@@ -2179,7 +2192,7 @@ function commitGroupEdit() {
   if (!_editGroup) return;
   _editGroup.title = document.getElementById('group-edit-title').value.trim() || 'Group';
   _editGroup.color = document.getElementById('group-edit-color').value;
-  closeGroupEdit(); saveState(); draw();
+  closeGroupEdit(); saveState(); scheduleDraw();
 }
 
 function closeGroupEdit() {
@@ -2206,7 +2219,7 @@ function showGroupCtxMenu(x, y, g) {
 }
 function closeGroupCtxMenu() { document.getElementById('group-ctx-menu').classList.remove('show'); _ctxGroup = null; }
 function openGroupEditCtx() { const g = _ctxGroup; closeGroupCtxMenu(); if (g) openGroupEdit(g); }
-function deleteGroupCtx() { if (_ctxGroup) { groups = groups.filter(g => g !== _ctxGroup); saveState(); draw(); } closeGroupCtxMenu(); }
+function deleteGroupCtx() { if (_ctxGroup) { groups = groups.filter(g => g !== _ctxGroup); saveState(); scheduleDraw(); } closeGroupCtxMenu(); }
 document.addEventListener('click', () => closeGroupCtxMenu());
 
 // ── Shortcut Overlay ──────────────────────────────────────
@@ -2222,7 +2235,7 @@ function applyTheme(t) {
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
   localStorage.setItem('rm_theme', t);
-  if (W > 0) draw();
+  if (W > 0) scheduleDraw();
 }
 function toggleTheme() {
   applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
