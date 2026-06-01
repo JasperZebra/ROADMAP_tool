@@ -470,23 +470,30 @@ function rr(c, x, y, w, h, r) {
 }
 
 function wrapText(c, text, x, y, maxWidth, lineHeight, maxLines) {
-  const words = text.split(' ');
-  let line = '', ty = y, count = 0;
-  for (const word of words) {
-    const test = line ? line + ' ' + word : word;
-    if (c.measureText(test).width > maxWidth && line) {
-      c.fillText(line, x, ty);
-      line = word; ty += lineHeight; count++;
-      if (maxLines && count >= maxLines - 1) {
-        const remaining = words.slice(words.indexOf(word) + 1).join(' ');
-        let last = word + (remaining ? ' ' + remaining : '');
-        while (c.measureText(last + '…').width > maxWidth && last.length > 1) last = last.slice(0, -1);
-        c.fillText(last + (remaining ? '…' : ''), x, ty);
-        return;
-      }
-    } else { line = test; }
+  let ty = y, lineCount = 0;
+  for (const para of (text || '').split('\n')) {
+    if (maxLines && lineCount >= maxLines) return;
+    const words = para.split(' ');
+    let line = '', wi = 0;
+    while (wi < words.length) {
+      if (maxLines && lineCount >= maxLines) return;
+      const word = words[wi];
+      const test = line ? line + ' ' + word : word;
+      if (c.measureText(test).width > maxWidth && line) {
+        if (maxLines && lineCount === maxLines - 1) {
+          let t = line;
+          while (c.measureText(t + '…').width > maxWidth && t.length > 1) t = t.slice(0, -1);
+          c.fillText(t + '…', x, ty); return;
+        }
+        c.fillText(line, x, ty); ty += lineHeight; lineCount++; line = word;
+      } else { line = test; }
+      wi++;
+    }
+    if (line) {
+      if (maxLines && lineCount >= maxLines) return;
+      c.fillText(line, x, ty); ty += lineHeight; lineCount++;
+    }
   }
-  if (line) c.fillText(line, x, ty);
 }
 
 function setTool(t) {
@@ -716,16 +723,17 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
   // Milestone Title — wrap to 2 lines, clip to node width
   const titleFontSize = 14 * scale;
   const titleLineH   = titleFontSize * 1.45;
-  c.fillStyle = '#111';
-  c.font = `800 ${titleFontSize}px system-ui`; c.textBaseline = 'top';
+  c.font = `800 ${titleFontSize}px system-ui`;
+  const titleWraps = c.measureText(n.name || 'Untitled').width > (nw - pad * 2);
+  const titleBlockH = (titleWraps ? 2 : 1) * titleLineH;
+  c.fillStyle = '#111'; c.textBaseline = 'top';
   c.save();
-  // Clip title to node card bounds so it can never bleed outside
   rr(c, s.x, s.y, nw, nh, 6 * scale); c.clip();
   wrapText(c, n.name || 'Untitled', s.x + pad, pillY + pillH + 5 * scale, nw - pad * 2, titleLineH, 2);
   c.restore();
 
-  // Attached Inner Image Media Element — starts below 2-line title budget
-  const imgAreaY = pillY + pillH + 5 * scale + titleLineH * 2 + 4 * scale;
+  // Attached Inner Image Media Element — starts right after actual title height
+  const imgAreaY = pillY + pillH + 5 * scale + titleBlockH + 4 * scale;
   const imgAreaH = nh - (imgAreaY - s.y) - 34 * scale; 
   
   if (n.img && imgCache[n.img] && imgCache[n.img].complete) {
@@ -1176,6 +1184,7 @@ function addModalTaskRow(text = '', done = false) {
 
 function commitEdit() {
   if (!_et) return;
+  if (!nodes.includes(_et)) { closeEdit(); return; } // node was deleted remotely
   _et.name = document.getElementById('edit-title').value.trim() || 'Untitled';
   _et.desc = document.getElementById('edit-desc').value.trim();
   _et.cat = document.getElementById('edit-cat').value.trim().toUpperCase() || 'CATEGORY';
@@ -1664,18 +1673,19 @@ function startFirebase() {
 
   // Canvas state sync
   _db.ref('rooms/' + roomId + '/state').on('value', snap => {
-    const data = snap.val();
-    if (!data) { broadcastState(); return; }
-    // Skip only live mid-action updates from self (committed saves have no _sender)
-    if (data._sender && data._sender === myUser.id) return;
-    nodes        = data.nodes        || [];
-    links        = data.links        || [];
-    strokes      = data.strokes      || [];
-    canvasImages = data.canvasImages || [];
-    _id          = data._id          || 1;
-    nodes.forEach(n => { if (n.img && !imgCache[n.img]) cacheImage(n.img); });
-    canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
-    draw();
+    try {
+      const data = snap.val();
+      if (!data) { broadcastState(); return; }
+      if (data._sender && data._sender === myUser.id) return;
+      nodes        = data.nodes        || [];
+      links        = data.links        || [];
+      strokes      = data.strokes      || [];
+      canvasImages = data.canvasImages || [];
+      _id          = data._id          || 1;
+      nodes.forEach(n => { if (n.img && !imgCache[n.img]) cacheImage(n.img); });
+      canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
+      draw();
+    } catch(e) { console.error('Failed to apply remote state:', e); }
   });
 
   // User presence (join / leave)

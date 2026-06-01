@@ -582,7 +582,7 @@ function startRename(id) {
   if (!el) return;
   el.contentEditable = 'true';
   el.focus();
-  const range = document.createRange(); range.selectNodeContents(el); range.collapse(false);
+  const range = document.createRange(); range.selectNodeContents(el);
   window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
 
   const save = () => {
