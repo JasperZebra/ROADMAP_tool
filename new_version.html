@@ -1084,6 +1084,39 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
 });
 
+// ── WASD Camera Movement ──────────────────────────────────
+const _keys = {};
+let _wasdRaf = null;
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (document.getElementById('modal-overlay').classList.contains('show')) return;
+  if (['w','a','s','d'].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    _keys[e.key.toLowerCase()] = true;
+    if (!_wasdRaf) _wasdRaf = requestAnimationFrame(_wasdLoop);
+  }
+});
+
+document.addEventListener('keyup', e => {
+  _keys[e.key.toLowerCase()] = false;
+});
+
+function _wasdLoop() {
+  const spd = 6;
+  let moved = false;
+  if (_keys['w']) { py += spd; moved = true; }
+  if (_keys['s']) { py -= spd; moved = true; }
+  if (_keys['a']) { px += spd; moved = true; }
+  if (_keys['d']) { px -= spd; moved = true; }
+  if (moved) draw();
+  if (_keys['w'] || _keys['s'] || _keys['a'] || _keys['d']) {
+    _wasdRaf = requestAnimationFrame(_wasdLoop);
+  } else {
+    _wasdRaf = null;
+  }
+}
+
 cv.addEventListener('wheel', e => {
   if (modal.classList.contains('show')) return;
   e.preventDefault(); const p = cpos(e);
