@@ -1296,15 +1296,25 @@ function updatePresenceBar() {
   });
 }
 
+// Strip selection state so it stays local and doesn't bleed to other users
+function serializeState() {
+  return {
+    nodes: nodes.map(n => Object.assign({}, n, { selected: false })),
+    links,
+    strokes,
+    canvasImages: canvasImages.map(img => Object.assign({}, img, { selected: false })),
+    _id,
+    _sender: myUser.id
+  };
+}
+
 // ── State broadcast (debounced 150 ms) ───────────────────
 let _broadcastTimer = null;
 function broadcastState() {
   if (!_db) return;
   clearTimeout(_broadcastTimer);
   _broadcastTimer = setTimeout(() => {
-    _db.ref('rooms/' + roomId + '/state')
-      .set({ nodes, links, strokes, canvasImages, _id, _sender: myUser.id })
-      .catch(() => {});
+    _db.ref('rooms/' + roomId + '/state').set(serializeState()).catch(() => {});
   }, 150);
 }
 
@@ -1315,9 +1325,7 @@ function broadcastStateLive() {
   const now = Date.now();
   if (now - _liveBroadcastMs < 50) return;
   _liveBroadcastMs = now;
-  _db.ref('rooms/' + roomId + '/state')
-    .set({ nodes, links, strokes, canvasImages, _id, _sender: myUser.id })
-    .catch(() => {});
+  _db.ref('rooms/' + roomId + '/state').set(serializeState()).catch(() => {});
 }
 
 
