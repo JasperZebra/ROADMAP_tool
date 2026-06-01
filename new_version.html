@@ -282,8 +282,8 @@ function loadState(stateStr) {
   draw(); updateHistoryButtons();
 }
 
-function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); } }
-function redo() { if (historyIdx < historyStack.length - 1) { historyIdx++; loadState(historyStack[historyIdx]); } }
+function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); broadcastState(); } }
+function redo() { if (historyIdx < historyStack.length - 1) { historyIdx++; loadState(historyStack[historyIdx]); broadcastState(); } }
 function updateHistoryButtons() {
   document.getElementById('btn-undo').disabled = historyIdx <= 0;
   document.getElementById('btn-redo').disabled = historyIdx >= historyStack.length - 1;
