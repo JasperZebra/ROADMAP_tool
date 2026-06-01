@@ -177,6 +177,16 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 .dd-item.danger:hover{background:#c0392b;color:#fff;}
 .dd-sep{height:1px;background:#2e3035;margin:3px 4px;}
 
+/* ── Project context menu ─────────────────────────────── */
+#proj-ctx-menu {
+  position:fixed; z-index:600;
+  background:#111214; border:1px solid #3a3c42; border-radius:7px;
+  padding:4px; min-width:185px;
+  box-shadow:0 8px 28px rgba(0,0,0,0.55);
+  display:none; flex-direction:column; gap:1px;
+}
+#proj-ctx-menu.show { display:flex; }
+
 /* ── Modals ───────────────────────────────────────────── */
 .modal-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
@@ -303,6 +313,9 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
     </div>
   </div>
 </div>
+
+<!-- Project right-click context menu -->
+<div id="proj-ctx-menu"></div>
 
 <!-- Name overlay (first time) -->
 <div id="name-overlay" style="display:none;">
@@ -503,6 +516,7 @@ function makeCard(id, proj) {
         e.target.closest('.card-color-wrap') || e.target.classList.contains('card-name') && e.target.contentEditable === 'true') return;
     openProject(id);
   });
+  el.addEventListener('contextmenu', e => { e.preventDefault(); showProjCtxMenu(id, e.clientX, e.clientY); });
   return el;
 }
 
@@ -522,7 +536,7 @@ function makeListRow(id, proj) {
   el.className = 'list-row' + (pinned?' pinned':'') + (completed?' completed':'') + (archived?' archived':'');
   el.innerHTML = `
     <div class="list-dot" style="background:${color}"></div>
-    <div class="list-name">
+    <div class="list-name" id="lname-${id}">
       ${esc(proj.name)}
       ${completed ? ' <span title="Completed" style="font-size:13px;">⭐</span>' : ''}
       ${archived  ? ' <span class="archived-badge">Archived</span>' : ''}
@@ -550,6 +564,7 @@ function makeListRow(id, proj) {
     if (e.target.closest('.list-actions')) return;
     openProject(id);
   });
+  el.addEventListener('contextmenu', e => { e.preventDefault(); showProjCtxMenu(id, e.clientX, e.clientY); });
   return el;
 }
 
@@ -578,7 +593,7 @@ function createProject() {
 }
 
 function startRename(id) {
-  const el = document.getElementById('name-' + id);
+  const el = document.getElementById('name-' + id) || document.getElementById('lname-' + id);
   if (!el) return;
   el.contentEditable = 'true';
   el.focus();
@@ -705,6 +720,49 @@ function timeAgo(ts) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+// ── Project context menu ──────────────────────────────────
+let _ctxProjId = null;
+
+function showProjCtxMenu(id, x, y) {
+  _ctxProjId = id;
+  const proj = _allProjects[id];
+  if (!proj) return;
+  const pinned    = !!proj.pinned;
+  const completed = !!proj.completed;
+  const archived  = !!proj.archived;
+  const name      = esc(proj.name);
+
+  const menu = document.getElementById('proj-ctx-menu');
+  menu.innerHTML = `
+    <div class="dd-item" onclick="startRename('${id}');closeProjCtxMenu()">✏️ Rename</div>
+    <div class="dd-item" onclick="duplicateProject('${id}');closeProjCtxMenu()">⧉ Duplicate</div>
+    <div class="dd-sep"></div>
+    <div class="dd-item" onclick="togglePin('${id}',${pinned});closeProjCtxMenu()">${pinned?'📌 Unpin':'📌 Pin to Top'}</div>
+    <div class="dd-item" onclick="toggleComplete('${id}',${completed});closeProjCtxMenu()">${completed?'✅ Mark Incomplete':'⭐ Mark Complete'}</div>
+    <div class="dd-item" onclick="toggleArchive('${id}',${archived});closeProjCtxMenu()">${archived?'📤 Unarchive':'📦 Archive'}</div>
+    <div class="dd-sep"></div>
+    <div class="dd-item danger" onclick="showDeleteModal('${id}','${name}');closeProjCtxMenu()">🗑️ Delete</div>
+  `;
+
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  menu.classList.add('show');
+
+  requestAnimationFrame(() => {
+    const r = menu.getBoundingClientRect();
+    if (r.right  > window.innerWidth)  menu.style.left = (x - r.width)  + 'px';
+    if (r.bottom > window.innerHeight) menu.style.top  = (y - r.height) + 'px';
+  });
+}
+
+function closeProjCtxMenu() {
+  document.getElementById('proj-ctx-menu').classList.remove('show');
+  _ctxProjId = null;
+}
+
+document.addEventListener('click',   () => closeProjCtxMenu());
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProjCtxMenu(); });
 
 // ── Boot ──────────────────────────────────────────────────
 (function boot() {
