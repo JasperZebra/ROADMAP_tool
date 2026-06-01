@@ -118,6 +118,29 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 }
 #offline-badge.show { display:flex; }
 
+/* ── Dropdowns ────────────────────────────────────────── */
+.dropdown { position:relative; }
+.dropdown-menu {
+  position:absolute; top:calc(100% + 6px); left:0;
+  background:#111214; border:1px solid #3a3c42; border-radius:6px;
+  padding:4px; min-width:180px; z-index:400;
+  box-shadow:0 8px 24px rgba(0,0,0,0.5);
+  display:none; flex-direction:column; gap:1px;
+}
+.dropdown-menu.show { display:flex; }
+.dropdown-menu.right { left:auto; right:0; }
+.dd-item {
+  padding:8px 12px; border-radius:4px; cursor:pointer;
+  font-size:12px; color:#dbdee1;
+  display:flex; align-items:center; gap:8px;
+  transition:background .1s; white-space:nowrap; user-select:none;
+}
+.dd-item:hover { background:#2b2d31; color:#fff; }
+.dd-item.danger:hover { background:#c0392b; color:#fff; }
+.dd-item.muted { opacity:0.35; pointer-events:none; }
+.dd-hint { margin-left:auto; color:#5c6068; font-size:10px; }
+.dd-sep { height:1px; background:#2e3035; margin:3px 4px; }
+
 /* Dynamic Task List styling */
 .modal-tasks-container {
   display: flex; flex-direction: column; gap:6px; max-height: 110px; 
@@ -133,42 +156,61 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 <div class="tb">
   <a href="index.html" class="btn" style="text-decoration:none;padding:0 10px;">← Projects</a>
   <div class="tb-div"></div>
-  <span id="project-name-label" class="tb-logo" style="color:#fff;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+  <span id="project-name-label" class="tb-logo" style="color:#fff;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
   <div class="tb-div"></div>
-  <button class="btn" onclick="undo()" id="btn-undo" title="Undo">⤺ Undo</button>
-  <button class="btn" onclick="redo()" id="btn-redo" title="Redo">⤼ Redo</button>
+
+  <!-- Edit dropdown -->
+  <div class="dropdown">
+    <button class="btn" onclick="toggleDD('dd-edit')">Edit ▾</button>
+    <div class="dropdown-menu" id="dd-edit">
+      <div class="dd-item muted" id="btn-undo" onclick="undo();closeDD()">⤺ Undo<span class="dd-hint">Ctrl+Z</span></div>
+      <div class="dd-item muted" id="btn-redo" onclick="redo();closeDD()">⤼ Redo<span class="dd-hint">Ctrl+Shift+Z</span></div>
+      <div class="dd-sep"></div>
+      <div class="dd-item danger" onclick="deleteSelected();closeDD()">🗑️ Delete Selected<span class="dd-hint">Del</span></div>
+    </div>
+  </div>
+
+  <!-- Add dropdown -->
+  <div class="dropdown">
+    <button class="btn" onclick="toggleDD('dd-add')">+ Add ▾</button>
+    <div class="dropdown-menu" id="dd-add">
+      <div class="dd-item" onclick="addNode();closeDD()">⬜ New Node</div>
+      <div class="dd-item" onclick="triggerCanvasImgUpload();closeDD()">🖼️ Image Frame</div>
+      <div class="dd-item" onclick="triggerImgUpload();closeDD()">🖼️ Set Node Image</div>
+    </div>
+  </div>
+
   <div class="tb-div"></div>
-  
-  <button class="btn" onclick="addNode()" title="Add Node">+ Node</button>
-  <button class="btn" onclick="triggerCanvasImgUpload()" title="Import Standalone Canvas ImageFrame">🖼️ + Image Frame</button>
-  <button class="btn" id="btn-img" onclick="triggerImgUpload()" title="Add Image to Selected Node">🖼️ Set Node Image</button>
-  
-  <div class="tb-div"></div>
-  <button class="btn" id="tool-select" onclick="setTool('select')">👆 Select / Move</button>
-  <button class="btn" id="tool-link" onclick="setTool('link')">🔗 Connect / Unlink</button>
+  <button class="btn" id="tool-select" onclick="setTool('select')">👆 Select</button>
+  <button class="btn" id="tool-link" onclick="setTool('link')">🔗 Link</button>
   <button class="btn" id="tool-draw" onclick="setTool('draw')">🖍️ Draw</button>
   <button class="btn" id="tool-erase" onclick="setTool('erase')">🧽 Erase</button>
-  
+
   <div class="brush-ui" id="brush-ui">
     <input type="color" id="brush-color" value="#444c56" title="Brush Color">
     <span class="brush-label">Size:</span>
     <input type="range" id="brush-size" min="1" max="15" value="3" title="Brush Size">
   </div>
 
-  <div class="tb-div"></div>
-  <button class="btn" onclick="deleteSelected()" title="Delete Selected">🗑️ Delete</button>
-
   <div class="tb-r">
     <div id="offline-badge">● Offline</div>
     <div class="presence-list" id="presence-list"></div>
     <div class="tb-div"></div>
-    <button class="btn" onclick="shareRoom()" id="btn-share" title="Copy share link">🔗 Share</button>
+    <button class="btn" onclick="shareRoom()" id="btn-share">🔗 Share</button>
     <div class="tb-div"></div>
-    <button class="btn blue" onclick="exportImage('png')">⬇️ PNG</button>
-    <button class="btn blue" onclick="exportImage('jpeg')">⬇️ JPEG</button>
-    <div class="tb-div"></div>
-    <button class="btn" onclick="openFile()">📂 Open JSON</button>
-    <button class="btn green" onclick="saveJSON()">💾 Save JSON</button>
+
+    <!-- File dropdown -->
+    <div class="dropdown">
+      <button class="btn" onclick="toggleDD('dd-file')">File ▾</button>
+      <div class="dropdown-menu right" id="dd-file">
+        <div class="dd-item" onclick="openFile();closeDD()">📂 Open JSON</div>
+        <div class="dd-item" onclick="saveJSON();closeDD()">💾 Save JSON</div>
+        <div class="dd-sep"></div>
+        <div class="dd-item" onclick="exportImage('png');closeDD()">⬇️ Export PNG</div>
+        <div class="dd-item" onclick="exportImage('jpeg');closeDD()">⬇️ Export JPEG</div>
+      </div>
+    </div>
+
     <div class="tb-div"></div>
     <button class="btn" onclick="zB(-0.1)">−</button>
     <span class="zl" id="zl">100%</span>
@@ -288,9 +330,22 @@ function loadState(stateStr) {
 function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); broadcastState(); } }
 function redo() { if (historyIdx < historyStack.length - 1) { historyIdx++; loadState(historyStack[historyIdx]); broadcastState(); } }
 function updateHistoryButtons() {
-  document.getElementById('btn-undo').disabled = historyIdx <= 0;
-  document.getElementById('btn-redo').disabled = historyIdx >= historyStack.length - 1;
+  document.getElementById('btn-undo').classList.toggle('muted', historyIdx <= 0);
+  document.getElementById('btn-redo').classList.toggle('muted', historyIdx >= historyStack.length - 1);
 }
+
+function toggleDD(id) {
+  const menu = document.getElementById(id);
+  const wasOpen = menu.classList.contains('show');
+  closeDD();
+  if (!wasOpen) menu.classList.add('show');
+}
+function closeDD() {
+  document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.dropdown')) closeDD();
+});
 
 // ═══════════════════════════════════════════════════════════
 // CANVAS & RENDERING
