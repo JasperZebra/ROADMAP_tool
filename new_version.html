@@ -2044,9 +2044,12 @@ function startFirebase() {
       links        = data.links        || [];
       strokes      = data.strokes      || [];
       canvasImages = data.canvasImages || [];
+      groups       = data.groups       || [];
       _id          = data._id          || 1;
-      nodes.forEach(n => { if (n.img && !imgCache[n.img]) cacheImage(n.img); });
+      if (data.favoriteColors && data.favoriteColors.length) favoriteColors = data.favoriteColors;
+      nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
       canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
+      renderFavColors();
       draw();
     } catch(e) { console.error('Failed to apply remote state:', e); }
   });
