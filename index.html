@@ -9,88 +9,171 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',system-ui,sans-serif;color:#dbdee1;}
 
+/* ── Header ───────────────────────────────────────────── */
 .header{
-  position:sticky;top:0;z-index:100;
+  position:sticky;top:0;z-index:200;
   background:#111214;border-bottom:1px solid #111;
-  padding:0 32px;height:56px;
-  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;height:56px;
+  display:flex;align-items:center;gap:10px;
 }
-.logo{font-size:18px;font-weight:700;color:#ddd;}
+.logo{font-size:17px;font-weight:700;color:#ddd;white-space:nowrap;margin-right:4px;}
 .logo em{color:#7289da;font-style:normal;font-weight:400;}
-.header-right{display:flex;align-items:center;gap:10px;}
-.user-chip{font-size:12px;color:#72767d;font-weight:600;}
+.search-wrap{flex:1;max-width:320px;position:relative;}
+.search-wrap input{
+  width:100%;height:32px;background:#1e1f22;border:1px solid #2e3035;
+  color:#dbdee1;padding:0 12px 0 32px;border-radius:6px;
+  font-size:12px;outline:none;font-family:inherit;
+}
+.search-wrap input:focus{border-color:#4752c4;}
+.search-wrap input::placeholder{color:#5c6068;}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#5c6068;font-size:13px;pointer-events:none;}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.online-dot{width:8px;height:8px;border-radius:50%;background:#5c6068;flex-shrink:0;transition:background .3s;}
+.online-dot.connected{background:#48a97a;}
+.user-chip{font-size:12px;color:#72767d;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:4px;transition:background .15s;}
+.user-chip:hover{background:#2b2d31;color:#fff;}
 
+/* ── Buttons ──────────────────────────────────────────── */
 .btn{
-  height:34px;padding:0 14px;border-radius:5px;
+  height:32px;padding:0 14px;border-radius:5px;
   border:1px solid #3a3a3a;background:#2b2d31;
   color:#dbdee1;font-size:12px;font-weight:500;cursor:pointer;
   display:inline-flex;align-items:center;gap:6px;
-  transition:all .15s;text-decoration:none;
+  transition:all .15s;text-decoration:none;white-space:nowrap;
 }
 .btn:hover{background:#3a3c42;color:#fff;}
 .btn.blue{background:#4752c4;border-color:#4752c4;color:#fff;}
 .btn.blue:hover{background:#5865f2;}
 .btn.red{background:#c0392b;border-color:#c0392b;color:#fff;}
 .btn.red:hover{background:#e74c3c;}
+.btn.icon{padding:0;width:32px;justify-content:center;}
+.btn.active{background:#4752c4;border-color:#4752c4;color:#fff;}
 
-.main{padding:36px 32px;max-width:1200px;margin:0 auto;}
-.section-title{
-  font-size:11px;font-weight:700;text-transform:uppercase;
-  color:#5c6068;letter-spacing:.8px;margin-bottom:20px;
+/* ── Toolbar bar (below header) ───────────────────────── */
+.toolbar{
+  padding:12px 24px;display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid #111;background:#18191c;
 }
+.toolbar-left{display:flex;align-items:center;gap:8px;flex:1;}
+.toolbar-right{display:flex;align-items:center;gap:6px;}
+.sort-select{
+  height:32px;background:#2b2d31;border:1px solid #3a3a3a;
+  color:#dbdee1;padding:0 10px;border-radius:5px;font-size:12px;
+  outline:none;cursor:pointer;
+}
+.sort-select:hover{background:#3a3c42;}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;color:#5c6068;letter-spacing:.8px;}
+
+/* ── Grid / List views ────────────────────────────────── */
+.main{padding:24px;max-width:1300px;margin:0 auto;}
 
 .projects-grid{
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
-  gap:16px;
+  gap:14px;
 }
 
+.projects-list{display:flex;flex-direction:column;gap:6px;}
+
+/* ── Grid card ────────────────────────────────────────── */
 .project-card{
   background:#2b2d31;border:1px solid #1e1f22;border-radius:10px;
-  padding:20px;cursor:pointer;position:relative;
-  transition:all .15s;display:flex;flex-direction:column;gap:12px;
-  min-height:150px;
+  padding:16px;cursor:pointer;position:relative;
+  transition:all .15s;display:flex;flex-direction:column;gap:10px;
+  min-height:160px;
 }
-.project-card:hover{
-  background:#313338;border-color:#4752c4;
-  transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.35);
-}
-.project-card-accent{height:4px;border-radius:2px;width:44px;}
-.project-card-name{font-size:15px;font-weight:700;color:#fff;line-height:1.4;word-break:break-word;}
-.project-card-by{font-size:11px;color:#5c6068;}
-.project-card-meta{font-size:11px;color:#72767d;margin-top:auto;}
-.project-card-delete{
-  position:absolute;top:10px;right:10px;
-  width:26px;height:26px;border-radius:5px;
-  border:none;background:transparent;color:#5c6068;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;
-  font-size:13px;transition:all .15s;opacity:0;
-}
-.project-card:hover .project-card-delete{opacity:1;}
-.project-card-delete:hover{background:#c0392b;color:#fff;}
+.project-card:hover{background:#313338;border-color:#4752c4;transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.35);}
+.project-card.pinned{border-color:#f5a623;}
 
-.new-card{
-  border:2px dashed #3a3c42;background:transparent;
-  align-items:center;justify-content:center;
-  color:#5c6068;font-size:13px;font-weight:600;gap:8px;
-  flex-direction:column;
+.card-top{display:flex;align-items:center;gap:6px;height:22px;}
+.card-pin-btn{
+  background:none;border:none;cursor:pointer;font-size:14px;
+  opacity:0;transition:opacity .15s;padding:0;line-height:1;color:#5c6068;
 }
-.new-card:hover{
-  border-color:#4752c4;color:#7289da;
-  background:rgba(71,82,196,0.06);transform:translateY(-2px);
-}
-.new-card-icon{font-size:28px;line-height:1;}
+.project-card:hover .card-pin-btn{opacity:1;}
+.card-pin-btn.pinned{opacity:1 !important;color:#f5a623;}
+.card-spacer{flex:1;}
 
-.empty-state{
-  grid-column:1/-1;text-align:center;padding:80px 20px;color:#5c6068;
-}
-.empty-state h3{font-size:18px;margin-bottom:8px;color:#72767d;}
-.empty-state p{font-size:13px;line-height:1.6;}
+.card-color-wrap{position:relative;}
+.card-color-dot{width:14px;height:14px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,0.15);transition:transform .15s;flex-shrink:0;}
+.card-color-dot:hover{transform:scale(1.3);}
+.card-color-input{position:absolute;width:0;height:0;opacity:0;pointer-events:none;}
 
-/* Modals */
+.card-more-btn{
+  background:none;border:none;cursor:pointer;color:#5c6068;
+  font-size:16px;padding:0 2px;line-height:1;opacity:0;transition:opacity .15s;
+}
+.project-card:hover .card-more-btn{opacity:1;}
+.card-more-btn:hover{color:#fff;}
+
+.card-accent{height:3px;border-radius:2px;width:100%;}
+.card-name{font-size:14px;font-weight:700;color:#fff;line-height:1.4;word-break:break-word;outline:none;}
+.card-name[contenteditable="true"]{
+  background:#1e1f22;border:1px solid #4752c4;border-radius:4px;
+  padding:2px 6px;cursor:text;
+}
+.card-nodes{font-size:11px;color:#72767d;}
+.card-presence{display:flex;gap:3px;flex-wrap:wrap;min-height:20px;}
+.card-meta{font-size:11px;color:#5c6068;margin-top:auto;}
+
+/* ── List row ─────────────────────────────────────────── */
+.list-row{
+  background:#2b2d31;border:1px solid #1e1f22;border-radius:7px;
+  padding:10px 14px;cursor:pointer;
+  display:flex;align-items:center;gap:12px;
+  transition:all .15s;
+}
+.list-row:hover{background:#313338;border-color:#4752c4;}
+.list-row.pinned{border-color:#f5a623;}
+.list-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.list-name{font-size:13px;font-weight:600;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.list-nodes{font-size:11px;color:#72767d;width:70px;flex-shrink:0;}
+.list-presence{display:flex;gap:3px;width:80px;flex-shrink:0;}
+.list-meta{font-size:11px;color:#5c6068;width:100px;flex-shrink:0;text-align:right;}
+.list-actions{display:flex;gap:4px;opacity:0;transition:opacity .15s;}
+.list-row:hover .list-actions{opacity:1;}
+
+/* ── Presence avatars ─────────────────────────────────── */
+.pres-dot{
+  width:20px;height:20px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;color:#fff;
+  border:2px solid #2b2d31;flex-shrink:0;
+  position:relative;
+}
+.pres-dot::after{
+  content:attr(data-tip);
+  position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+  background:#111;color:#fff;padding:2px 6px;border-radius:4px;
+  white-space:nowrap;font-size:10px;pointer-events:none;
+  opacity:0;transition:opacity .15s;z-index:999;
+}
+.pres-dot:hover::after{opacity:1;}
+
+/* ── Dropdowns ────────────────────────────────────────── */
+.dropdown{position:relative;}
+.dropdown-menu{
+  position:absolute;top:calc(100% + 4px);right:0;
+  background:#111214;border:1px solid #3a3c42;border-radius:6px;
+  padding:4px;min-width:160px;z-index:500;
+  box-shadow:0 8px 24px rgba(0,0,0,0.5);
+  display:none;flex-direction:column;gap:1px;
+}
+.dropdown-menu.show{display:flex;}
+.dd-item{
+  padding:7px 12px;border-radius:4px;cursor:pointer;
+  font-size:12px;color:#dbdee1;
+  display:flex;align-items:center;gap:8px;
+  transition:background .1s;white-space:nowrap;user-select:none;
+}
+.dd-item:hover{background:#2b2d31;color:#fff;}
+.dd-item.danger:hover{background:#c0392b;color:#fff;}
+.dd-sep{height:1px;background:#2e3035;margin:3px 4px;}
+
+/* ── Modals ───────────────────────────────────────────── */
 .modal-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
-  background:rgba(0,0,0,0.75);z-index:500;
+  background:rgba(0,0,0,0.75);z-index:600;
   display:none;align-items:center;justify-content:center;
   backdrop-filter:blur(4px);
 }
@@ -110,7 +193,7 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 .modal input[type="text"]:focus{border-color:#7289da;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
 
-/* Name overlay */
+/* ── Name overlay ─────────────────────────────────────── */
 #name-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
   background:rgba(0,0,0,0.85);z-index:700;
@@ -130,22 +213,50 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
   font-size:14px;outline:none;font-family:inherit;
 }
 .name-modal input:focus{border-color:#7289da;}
+
+.empty-state{
+  grid-column:1/-1;text-align:center;padding:80px 20px;color:#5c6068;
+}
+.empty-state h3{font-size:18px;margin-bottom:8px;color:#72767d;}
+.empty-state p{font-size:13px;line-height:1.6;}
 </style>
 </head>
 <body>
 
+<!-- Header -->
 <div class="header">
   <span class="logo">Roadmap <em>Pro</em></span>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="search-input" placeholder="Search projects..." autocomplete="off">
+  </div>
   <div class="header-right">
-    <span class="user-chip" id="user-chip"></span>
+    <div class="online-dot" id="online-dot" title="Connecting..."></div>
+    <span class="user-chip" id="user-chip" onclick="showChangeName()" title="Click to change name"></span>
     <button class="btn blue" onclick="showNewProjectModal()">+ New Project</button>
   </div>
 </div>
 
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <span class="section-title">Projects</span>
+  </div>
+  <div class="toolbar-right">
+    <select class="sort-select" id="sort-select" onchange="setSortBy(this.value)">
+      <option value="lastModified">Last Modified</option>
+      <option value="created">Date Created</option>
+      <option value="name">Name A–Z</option>
+      <option value="nodes">Node Count</option>
+    </select>
+    <button class="btn icon" id="view-grid-btn" onclick="setView('grid')" title="Grid view" style="font-size:15px;">⊞</button>
+    <button class="btn icon" id="view-list-btn" onclick="setView('list')" title="List view" style="font-size:15px;">☰</button>
+  </div>
+</div>
+
 <div class="main">
-  <div class="section-title">Projects</div>
-  <div class="projects-grid" id="projects-grid">
-    <div style="color:#5c6068;font-size:13px;padding:40px;">Loading...</div>
+  <div id="projects-container">
+    <div style="color:#5c6068;font-size:13px;padding:40px 0;">Loading projects...</div>
   </div>
 </div>
 
@@ -161,11 +272,11 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
   </div>
 </div>
 
-<!-- Delete Confirm Modal -->
+<!-- Delete Modal -->
 <div class="modal-overlay" id="delete-modal">
   <div class="modal">
     <h3>Delete Project</h3>
-    <p>Are you sure you want to delete "<span id="delete-name" style="color:#fff;font-weight:600;"></span>"? This cannot be undone and will remove all roadmap data.</p>
+    <p>Are you sure you want to delete "<span id="delete-name" style="color:#fff;font-weight:600;"></span>"? This cannot be undone.</p>
     <div class="modal-actions">
       <button class="btn" onclick="hideDeleteModal()">Cancel</button>
       <button class="btn red" onclick="confirmDelete()">Delete</button>
@@ -173,7 +284,19 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
   </div>
 </div>
 
-<!-- Name overlay -->
+<!-- Change Name Modal -->
+<div class="modal-overlay" id="change-name-modal">
+  <div class="modal">
+    <h3>Change Display Name</h3>
+    <input type="text" id="change-name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn" onclick="hideChangeName()">Cancel</button>
+      <button class="btn blue" onclick="confirmChangeName()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Name overlay (first time) -->
 <div id="name-overlay" style="display:none;">
   <div class="name-modal">
     <h2>Welcome</h2>
@@ -202,11 +325,16 @@ const COLLAB_COLORS = ['#e05050','#48a97a','#f5a623','#9b6fd6','#00bcd4','#e91e6
 let _db = null;
 let myUser = { id:'', name:'', color:'' };
 let _deleteTargetId = null;
+let _allProjects = {};
+let _allPresence = {};
+let sortBy = localStorage.getItem('rm_sort') || 'lastModified';
+let viewMode = localStorage.getItem('rm_view') || 'grid';
+let searchQuery = '';
 
+// ── User identity ─────────────────────────────────────────
 function getStoredUser() {
   try { return JSON.parse(localStorage.getItem('rm_collab_user') || 'null'); } catch { return null; }
 }
-
 function initMyUser(name) {
   let stored = getStoredUser() || {
     id: Math.random().toString(36).slice(2, 12),
@@ -218,8 +346,12 @@ function initMyUser(name) {
   document.getElementById('user-chip').textContent = '● ' + myUser.name;
 }
 
-document.getElementById('name-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') confirmName();
+// ── Name prompts ──────────────────────────────────────────
+['name-input','change-name-input'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') id === 'name-input' ? confirmName() : confirmChangeName();
+    if (e.key === 'Escape') id === 'change-name-input' && hideChangeName();
+  });
 });
 
 function confirmName() {
@@ -229,52 +361,176 @@ function confirmName() {
   initFirebase();
 }
 
+function showChangeName() {
+  document.getElementById('change-name-input').value = myUser.name;
+  document.getElementById('change-name-modal').classList.add('show');
+  setTimeout(() => document.getElementById('change-name-input').focus(), 50);
+}
+function hideChangeName() { document.getElementById('change-name-modal').classList.remove('show'); }
+function confirmChangeName() {
+  const name = document.getElementById('change-name-input').value.trim() || 'User';
+  initMyUser(name);
+  hideChangeName();
+}
+
+// ── Firebase ──────────────────────────────────────────────
 function initFirebase() {
   try { firebase.app(); } catch { firebase.initializeApp(FIREBASE_CONFIG); }
   _db = firebase.database();
+
+  // Online indicator
+  _db.ref('.info/connected').on('value', snap => {
+    const dot = document.getElementById('online-dot');
+    if (snap.val()) {
+      dot.classList.add('connected');
+      dot.title = 'Connected';
+    } else {
+      dot.classList.remove('connected');
+      dot.title = 'Disconnected';
+    }
+  });
+
+  // Projects
   _db.ref('projects').on('value', snap => {
-    renderProjects(snap.val() || {});
+    _allProjects = snap.val() || {};
+    render();
+  });
+
+  // Live presence across all rooms
+  _db.ref('rooms').on('value', snap => {
+    _allPresence = {};
+    const rooms = snap.val() || {};
+    Object.entries(rooms).forEach(([roomId, room]) => {
+      if (room.presence) _allPresence[roomId] = room.presence;
+    });
+    render();
   });
 }
 
-function renderProjects(data) {
-  const grid = document.getElementById('projects-grid');
-  const entries = Object.entries(data).sort((a, b) => (b[1].lastModified || 0) - (a[1].lastModified || 0));
+// ── Render ────────────────────────────────────────────────
+function render() {
+  updateViewButtons();
+  let entries = Object.entries(_allProjects);
 
-  grid.innerHTML = '';
+  // Filter by search
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    entries = entries.filter(([, p]) => p.name && p.name.toLowerCase().includes(q));
+  }
 
-  entries.forEach(([id, proj]) => {
-    const color = proj.color || ACCENT_COLORS[0];
-    const card = document.createElement('div');
-    card.className = 'project-card';
-    card.onclick = (e) => { if (!e.target.classList.contains('project-card-delete')) openProject(id); };
-    card.innerHTML = `
-      <div class="project-card-accent" style="background:${color}"></div>
-      <div class="project-card-name">${esc(proj.name)}</div>
-      <div class="project-card-by">by ${esc(proj.createdBy || 'Unknown')}</div>
-      <div class="project-card-meta">Last edited ${timeAgo(proj.lastModified)}</div>
-      <button class="project-card-delete" onclick="showDeleteModal('${id}','${esc(proj.name)}')" title="Delete project">✕</button>
-    `;
-    grid.appendChild(card);
+  // Sort
+  entries.sort((a, b) => {
+    if (a[1].pinned && !b[1].pinned) return -1;
+    if (!a[1].pinned && b[1].pinned) return 1;
+    if (sortBy === 'name')         return (a[1].name || '').localeCompare(b[1].name || '');
+    if (sortBy === 'created')      return (b[1].created || 0) - (a[1].created || 0);
+    if (sortBy === 'nodes')        return (b[1].nodeCount || 0) - (a[1].nodeCount || 0);
+    return (b[1].lastModified || 0) - (a[1].lastModified || 0);
   });
+
+  const container = document.getElementById('projects-container');
+  container.className = viewMode === 'list' ? 'projects-list' : 'projects-grid';
+  container.innerHTML = '';
 
   if (entries.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        <h3>No projects yet</h3>
-        <p>Click "+ New Project" to create your first roadmap.</p>
-      </div>`;
+    container.innerHTML = `<div class="empty-state"><h3>${searchQuery ? 'No results' : 'No projects yet'}</h3><p>${searchQuery ? 'Try a different search.' : 'Click "+ New Project" to get started.'}</p></div>`;
+    return;
   }
+
+  entries.forEach(([id, proj]) => {
+    container.appendChild(viewMode === 'list' ? makeListRow(id, proj) : makeCard(id, proj));
+  });
 }
+
+function makeCard(id, proj) {
+  const color    = proj.color || ACCENT_COLORS[0];
+  const pinned   = !!proj.pinned;
+  const nodes    = proj.nodeCount || 0;
+  const presence = _allPresence[id] || {};
+  const presHtml = Object.values(presence).map(u =>
+    `<div class="pres-dot" style="background:${u.color||'#999'}" data-tip="${esc(u.name||'User')}">${(u.name||'?')[0].toUpperCase()}</div>`
+  ).join('');
+
+  const el = document.createElement('div');
+  el.className = 'project-card' + (pinned ? ' pinned' : '');
+  el.innerHTML = `
+    <div class="card-top">
+      <button class="card-pin-btn ${pinned?'pinned':''}" onclick="togglePin('${id}',${pinned})" title="${pinned?'Unpin':'Pin to top'}">📌</button>
+      <div class="card-spacer"></div>
+      <div class="card-color-wrap">
+        <div class="card-color-dot" style="background:${color}" onclick="this.nextElementSibling.click()" title="Change color"></div>
+        <input type="color" class="card-color-input" value="${color}" onchange="changeColor('${id}',this.value)">
+      </div>
+      <div class="dropdown">
+        <button class="card-more-btn" onclick="toggleDD('dd-${id}')">⋯</button>
+        <div class="dropdown-menu" id="dd-${id}">
+          <div class="dd-item" onclick="startRename('${id}');closeDD()">✏️ Rename</div>
+          <div class="dd-item" onclick="duplicateProject('${id}');closeDD()">⧉ Duplicate</div>
+          <div class="dd-sep"></div>
+          <div class="dd-item danger" onclick="showDeleteModal('${id}','${esc(proj.name)}');closeDD()">🗑️ Delete</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-accent" style="background:${color}"></div>
+    <div class="card-name" id="name-${id}" ondblclick="startRename('${id}')">${esc(proj.name)}</div>
+    <div class="card-nodes">${nodes} node${nodes===1?'':'s'}</div>
+    <div class="card-presence">${presHtml}</div>
+    <div class="card-meta">by ${esc(proj.createdBy||'Unknown')} · ${timeAgo(proj.lastModified)}</div>
+  `;
+  el.addEventListener('click', e => {
+    if (e.target.closest('.card-pin-btn') || e.target.closest('.dropdown') ||
+        e.target.closest('.card-color-wrap') || e.target.classList.contains('card-name') && e.target.contentEditable === 'true') return;
+    openProject(id);
+  });
+  return el;
+}
+
+function makeListRow(id, proj) {
+  const color    = proj.color || ACCENT_COLORS[0];
+  const pinned   = !!proj.pinned;
+  const nodes    = proj.nodeCount || 0;
+  const presence = _allPresence[id] || {};
+  const presHtml = Object.values(presence).slice(0,4).map(u =>
+    `<div class="pres-dot" style="background:${u.color||'#999'}" data-tip="${esc(u.name||'User')}">${(u.name||'?')[0].toUpperCase()}</div>`
+  ).join('');
+
+  const el = document.createElement('div');
+  el.className = 'list-row' + (pinned ? ' pinned' : '');
+  el.innerHTML = `
+    <div class="list-dot" style="background:${color}"></div>
+    <div class="list-name">${esc(proj.name)}</div>
+    <div class="list-nodes">${nodes} nodes</div>
+    <div class="list-presence">${presHtml}</div>
+    <div class="list-meta">${timeAgo(proj.lastModified)}</div>
+    <div class="list-actions">
+      <button class="btn icon" onclick="togglePin('${id}',${pinned})" title="${pinned?'Unpin':'Pin'}" style="font-size:13px;color:${pinned?'#f5a623':'#5c6068'}">📌</button>
+      <div class="dropdown">
+        <button class="btn icon" onclick="toggleDD('ddl-${id}')" style="font-size:16px;">⋯</button>
+        <div class="dropdown-menu" id="ddl-${id}">
+          <div class="dd-item" onclick="startRename('${id}');closeDD()">✏️ Rename</div>
+          <div class="dd-item" onclick="duplicateProject('${id}');closeDD()">⧉ Duplicate</div>
+          <div class="dd-sep"></div>
+          <div class="dd-item danger" onclick="showDeleteModal('${id}','${esc(proj.name)}');closeDD()">🗑️ Delete</div>
+        </div>
+      </div>
+    </div>
+  `;
+  el.addEventListener('click', e => {
+    if (e.target.closest('.list-actions')) return;
+    openProject(id);
+  });
+  return el;
+}
+
+// ── Project actions ───────────────────────────────────────
+function openProject(id) { window.location.href = 'new_version.html?p=' + id; }
 
 function showNewProjectModal() {
   document.getElementById('project-name-input').value = '';
   document.getElementById('new-project-modal').classList.add('show');
   setTimeout(() => document.getElementById('project-name-input').focus(), 50);
 }
-function hideNewProjectModal() {
-  document.getElementById('new-project-modal').classList.remove('show');
-}
+function hideNewProjectModal() { document.getElementById('new-project-modal').classList.remove('show'); }
 document.getElementById('project-name-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') createProject();
   if (e.key === 'Escape') hideNewProjectModal();
@@ -283,17 +539,51 @@ document.getElementById('project-name-input').addEventListener('keydown', e => {
 function createProject() {
   const name = document.getElementById('project-name-input').value.trim();
   if (!name) { document.getElementById('project-name-input').focus(); return; }
-
-  const id    = Math.random().toString(36).slice(2, 10);
+  const id = Math.random().toString(36).slice(2, 10);
   const color = ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)];
-  const now   = Date.now();
-
-  _db.ref('projects/' + id).set({ name, color, created: now, lastModified: now, createdBy: myUser.name })
+  const now = Date.now();
+  _db.ref('projects/' + id).set({ name, color, created: now, lastModified: now, createdBy: myUser.name, nodeCount: 0, pinned: false })
     .then(() => { hideNewProjectModal(); openProject(id); });
 }
 
-function openProject(id) {
-  window.location.href = 'new_version.html?p=' + id;
+function startRename(id) {
+  const el = document.getElementById('name-' + id);
+  if (!el) return;
+  el.contentEditable = 'true';
+  el.focus();
+  const range = document.createRange(); range.selectNodeContents(el); range.collapse(false);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+
+  const save = () => {
+    el.contentEditable = 'false';
+    const newName = el.textContent.trim() || _allProjects[id]?.name || 'Untitled';
+    el.textContent = newName;
+    _db.ref('projects/' + id + '/name').set(newName).catch(() => {});
+  };
+  el.onblur = save;
+  el.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } if (e.key === 'Escape') { el.textContent = _allProjects[id]?.name || ''; el.blur(); } };
+}
+
+function duplicateProject(id) {
+  const src = _allProjects[id]; if (!src) return;
+  const newId = Math.random().toString(36).slice(2, 10);
+  const now = Date.now();
+  const meta = Object.assign({}, src, { name: src.name + ' (copy)', created: now, lastModified: now, createdBy: myUser.name });
+
+  _db.ref('projects/' + newId).set(meta).then(() => {
+    // Copy canvas state if it exists
+    _db.ref('rooms/' + id + '/state').once('value', snap => {
+      if (snap.val()) _db.ref('rooms/' + newId + '/state').set(snap.val());
+    });
+  });
+}
+
+function togglePin(id, currentlyPinned) {
+  _db.ref('projects/' + id + '/pinned').set(!currentlyPinned).catch(() => {});
+}
+
+function changeColor(id, color) {
+  _db.ref('projects/' + id + '/color').set(color).catch(() => {});
 }
 
 function showDeleteModal(id, name) {
@@ -301,10 +591,7 @@ function showDeleteModal(id, name) {
   document.getElementById('delete-name').textContent = name;
   document.getElementById('delete-modal').classList.add('show');
 }
-function hideDeleteModal() {
-  _deleteTargetId = null;
-  document.getElementById('delete-modal').classList.remove('show');
-}
+function hideDeleteModal() { _deleteTargetId = null; document.getElementById('delete-modal').classList.remove('show'); }
 function confirmDelete() {
   if (!_deleteTargetId) return;
   Promise.all([
@@ -313,21 +600,51 @@ function confirmDelete() {
   ]).then(hideDeleteModal);
 }
 
+// ── Sort / View / Search ──────────────────────────────────
+function setSortBy(val) {
+  sortBy = val; localStorage.setItem('rm_sort', val); render();
+}
+function setView(mode) {
+  viewMode = mode; localStorage.setItem('rm_view', mode); render();
+}
+function updateViewButtons() {
+  document.getElementById('view-grid-btn').classList.toggle('active', viewMode === 'grid');
+  document.getElementById('view-list-btn').classList.toggle('active', viewMode === 'list');
+  document.getElementById('sort-select').value = sortBy;
+}
+
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQuery = e.target.value.trim();
+  render();
+});
+
+// ── Dropdowns ─────────────────────────────────────────────
+function toggleDD(id) {
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const wasOpen = menu.classList.contains('show');
+  closeDD();
+  if (!wasOpen) menu.classList.add('show');
+}
+function closeDD() { document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show')); }
+document.addEventListener('click', e => { if (!e.target.closest('.dropdown')) closeDD(); });
+
+// ── Helpers ───────────────────────────────────────────────
 function timeAgo(ts) {
   if (!ts) return 'never';
   const d = Date.now() - ts;
-  const m = Math.floor(d / 60000), h = Math.floor(d / 3600000), dy = Math.floor(d / 86400000);
-  if (m < 1)  return 'just now';
+  const m = Math.floor(d/60000), h = Math.floor(d/3600000), dy = Math.floor(d/86400000);
+  if (m < 1) return 'just now';
   if (m < 60) return m + 'm ago';
   if (h < 24) return h + 'h ago';
   if (dy < 30) return dy + 'd ago';
   return new Date(ts).toLocaleDateString();
 }
-
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// ── Boot ──────────────────────────────────────────────────
 (function boot() {
   const stored = getStoredUser();
   if (stored && stored.name) {

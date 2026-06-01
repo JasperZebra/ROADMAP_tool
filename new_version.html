@@ -1407,6 +1407,7 @@ function broadcastState() {
   _broadcastTimer = setTimeout(() => {
     _db.ref('rooms/' + roomId + '/state').set(serializeState()).catch(() => {});
     _db.ref('projects/' + roomId + '/lastModified').set(Date.now()).catch(() => {});
+    _db.ref('projects/' + roomId + '/nodeCount').set(nodes.length).catch(() => {});
   }, 150);
 }
 
@@ -1512,15 +1513,7 @@ function startFirebase() {
 // INITIALIZATION
 // ═══════════════════════════════════════════════════════════
 resize();
-(function initDemo() {
-  nodes.push({ id: _id++, x: 100, y: 220, w: NW, h: NH, name: 'Main Objective', desc: 'Core operational pipeline.', cat: 'MILESTONE', color: '#4752c4', complete: true, tasks: [] });
-  nodes.push({ id: _id++, x: 440, y: 130, w: NW, h: NH, name: 'Bug Fix #01', desc: 'Memory leaks on viewport resize.', cat: 'BUG FIX', color: '#e05050', complete: false, tasks: [] });
-  nodes.push({ id: _id++, x: 440, y: 340, w: NW, h: NH, name: 'Bug Fix #02', desc: 'Render artifacting shader error.', cat: 'BUG FIX', color: '#e05050', complete: false, tasks: [] });
-  
-  links.push({ from: 1, to: 2 });
-  links.push({ from: 1, to: 3 });
-  saveState(); draw();
-})();
+draw();
 
 // Boot: redirect to projects if no project ID, else start session
 (function boot() {
