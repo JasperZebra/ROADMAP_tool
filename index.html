@@ -623,13 +623,13 @@ function fireConfetti() {
     particleCount: 120,
     angle,
     spread: 70,
-    origin: { x, y: 0.9 },
+    origin: { x, y: 1 },
     scalar: 1.6,
     colors
   });
-  burst(0,   65);   // hard left edge, shooting right+up
-  burst(1,  115);   // hard right edge, shooting left+up
-  setTimeout(() => burst(0.5, 90), 250); // center, shooting straight up
+  burst(0.15,  65);
+  burst(0.85, 115);
+  setTimeout(() => burst(0.5, 90), 250);
 }
 function toggleArchive(id, currently) {
   _db.ref('projects/' + id + '/archived').set(!currently).catch(() => {});
