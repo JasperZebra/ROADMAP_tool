@@ -811,7 +811,7 @@ window.addEventListener('mousemove', e => {
   
   if (_drawing && _curStroke) {
     _curStroke.points.push(sw(p.x, p.y));
-    broadcastStateLive(); draw(); return;
+    draw(); return;
   }
   
   if (_tempLink) {
@@ -842,7 +842,7 @@ window.addEventListener('mousemove', e => {
       _activeImg.x = cx - _activeImg.w / 2;
       _activeImg.y = cy - _activeImg.h / 2;
     }
-    broadcastStateLive(); draw(); return;
+    draw(); return;
   }
   
   if (_selBoxStart) {
@@ -860,7 +860,7 @@ window.addEventListener('mousemove', e => {
       item.node.x = w.x + item.offX;
       item.node.y = w.y + item.offY;
     });
-    broadcastStateLive(); draw();
+    draw();
   }
 });
 
@@ -1310,17 +1310,6 @@ function broadcastState() {
   }, 150);
 }
 
-// ── Live broadcast during drag/draw (throttled 50 ms) ────
-let _liveBroadcastMs = 0;
-function broadcastStateLive() {
-  if (!_db) return;
-  const now = Date.now();
-  if (now - _liveBroadcastMs < 50) return;
-  _liveBroadcastMs = now;
-  _db.ref('rooms/' + roomId + '/state')
-    .set({ nodes, links, strokes, canvasImages, _id })
-    .catch(() => {});
-}
 
 // ── Cursor broadcast (throttled ~30 fps) ─────────────────
 let _lastCursorMs = 0;
@@ -1357,11 +1346,6 @@ function startFirebase() {
 
   // Canvas state sync
   _db.ref('rooms/' + roomId + '/state').on('value', snap => {
-    // Don't overwrite local state while the user is mid-action —
-    // the incoming data is our own broadcast bouncing back, and applying
-    // it would break active object references (_curStroke, _dragGroup, etc.)
-    if (_drawing || _dn || _activeImg) return;
-
     const data = snap.val();
     if (!data) {
       broadcastState();
