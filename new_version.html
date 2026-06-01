@@ -37,11 +37,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;background:#1e1f
 .zl{font-size:12px;color:#999;width:42px;text-align:center;font-weight:600;}
 
 /* Brush Settings */
-.brush-ui { display:none; align-items:center; gap:6px; background:#111214; padding:0 8px; border-radius:4px; height:30px; }
-.brush-ui.active { display:flex; }
-.brush-ui input[type="color"] { width:24px; height:24px; padding:0; border:none; cursor:pointer; background:transparent;}
-.brush-ui input[type="range"] { width:60px; cursor:pointer; }
+.brush-ui, .erase-ui { display:none; align-items:center; gap:6px; background:#111214; padding:0 8px; border-radius:4px; height:30px; }
+.brush-ui.active, .erase-ui.active { display:flex; }
+.brush-ui input[type="color"] { width:20px; height:20px; padding:0; border:none; cursor:pointer; background:transparent; border-radius:50%; overflow:hidden; flex-shrink:0; }
+.brush-ui input[type="range"], .erase-ui input[type="range"] { width:60px; cursor:pointer; }
 .brush-label { color:#aaa; font-size:11px; font-weight:600;}
+.swatch-row { display:flex; gap:3px; align-items:center; }
+.swatch { width:15px; height:15px; border-radius:50%; cursor:pointer; border:2px solid transparent; flex-shrink:0; transition:border-color .1s, transform .1s; }
+.swatch:hover { border-color:#fff; transform:scale(1.15); }
+.swatch.active { border-color:#fff; }
 
 /* ── Layout ───────────────────────────────────────────── */
 .ws{position:fixed;top:48px;left:0;right:0;bottom:0;display:flex;}
@@ -239,9 +243,24 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   <button class="btn" id="tool-erase" onclick="setTool('erase')">🧽 Erase</button>
 
   <div class="brush-ui" id="brush-ui">
-    <input type="color" id="brush-color" value="#444c56" title="Brush Color">
+    <div class="swatch-row">
+      <div class="swatch active" data-color="#ffffff" style="background:#ffffff" title="White" onclick="setBrushColor('#ffffff')"></div>
+      <div class="swatch" data-color="#adb5bd" style="background:#adb5bd" title="Gray" onclick="setBrushColor('#adb5bd')"></div>
+      <div class="swatch" data-color="#e74c3c" style="background:#e74c3c" title="Red" onclick="setBrushColor('#e74c3c')"></div>
+      <div class="swatch" data-color="#e67e22" style="background:#e67e22" title="Orange" onclick="setBrushColor('#e67e22')"></div>
+      <div class="swatch" data-color="#f1c40f" style="background:#f1c40f" title="Yellow" onclick="setBrushColor('#f1c40f')"></div>
+      <div class="swatch" data-color="#2ecc71" style="background:#2ecc71" title="Green" onclick="setBrushColor('#2ecc71')"></div>
+      <div class="swatch" data-color="#3498db" style="background:#3498db" title="Blue" onclick="setBrushColor('#3498db')"></div>
+      <div class="swatch" data-color="#9b59b6" style="background:#9b59b6" title="Purple" onclick="setBrushColor('#9b59b6')"></div>
+    </div>
+    <input type="color" id="brush-color" value="#ffffff" title="Custom Color" oninput="syncSwatchFromPicker()">
     <span class="brush-label">Size:</span>
-    <input type="range" id="brush-size" min="1" max="15" value="3" title="Brush Size">
+    <input type="range" id="brush-size" min="1" max="20" value="4" title="Brush Size">
+  </div>
+
+  <div class="erase-ui" id="erase-ui">
+    <span class="brush-label">Eraser:</span>
+    <input type="range" id="erase-size" min="4" max="60" value="18" title="Eraser Size">
   </div>
 
   <div class="tb-r">
@@ -507,13 +526,22 @@ function setTool(t) {
     document.getElementById(`tool-${t}`).classList.add('active');
   }
   
-  document.getElementById('brush-ui').classList.toggle('active', t === 'draw' || t === 'erase');
-  
-  // Grey out color picker when erasing
-  document.getElementById('brush-color').style.opacity = t === 'erase' ? '0.2' : '1';
-  document.getElementById('brush-color').style.pointerEvents = t === 'erase' ? 'none' : 'auto';
+  document.getElementById('brush-ui').classList.toggle('active', t === 'draw');
+  document.getElementById('erase-ui').classList.toggle('active', t === 'erase');
+  // Hide OS cursor when erasing so the preview circle is the cursor
+  document.querySelector('canvas').style.cursor = t === 'erase' ? 'none' : '';
+  draw();
 }
 setTool('select');
+
+function setBrushColor(hex) {
+  document.getElementById('brush-color').value = hex;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.color === hex));
+}
+function syncSwatchFromPicker() {
+  const hex = document.getElementById('brush-color').value.toLowerCase();
+  document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.color === hex));
+}
 
 // Standalone Image Transforms Tracker
 function getImgHandles(img) {
@@ -845,6 +873,20 @@ function draw() {
   }
 
   renderRemoteCursors();
+
+  // Eraser cursor preview circle
+  if (tool === 'erase') {
+    const sz = parseFloat(document.getElementById('erase-size').value);
+    const r = sz * sc / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(_mouseScreen.x, _mouseScreen.y, Math.max(r, 2), 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -874,6 +916,7 @@ let _drawing = false, _curStroke = null;
 let _selBoxStart = null, _selBox = null;
 let _clipboard = [];
 let _mouseWorld = { x: 0, y: 0 };
+let _mouseScreen = { x: 0, y: 0 };
 
 // Standalone Image Transformation Locks
 let _activeImg = null;
@@ -902,11 +945,12 @@ cv.addEventListener('mousedown', e => {
   
   if (tool === 'draw' || tool === 'erase') {
     _drawing = true;
-    _curStroke = { 
-      points: [sw(p.x, p.y)], 
-      color: document.getElementById('brush-color').value, 
-      width: parseFloat(document.getElementById('brush-size').value),
-      isEraser: tool === 'erase' // Tag as an erasure path
+    const _isEraser = tool === 'erase';
+    _curStroke = {
+      points: [sw(p.x, p.y)],
+      color: document.getElementById('brush-color').value,
+      width: _isEraser ? parseFloat(document.getElementById('erase-size').value) : parseFloat(document.getElementById('brush-size').value),
+      isEraser: _isEraser
     };
     strokes.push(_curStroke);
     draw(); // Render dot immediately
@@ -1008,6 +1052,7 @@ window.addEventListener('mousemove', e => {
   const p = cpos(e);
   const _wc = sw(p.x, p.y); broadcastCursor(_wc.x, _wc.y);
   _mouseWorld.x = _wc.x; _mouseWorld.y = _wc.y;
+  _mouseScreen.x = p.x; _mouseScreen.y = p.y;
 
   if (_panning) {
     px = _panOrig.px + (p.x - _panStart.x);
@@ -1068,6 +1113,9 @@ window.addEventListener('mousemove', e => {
     });
     broadcastStateLive(); draw();
   }
+
+  // Keep eraser cursor circle moving even when not drawing
+  if (tool === 'erase') draw();
 });
 
 window.addEventListener('mouseup', e => {
