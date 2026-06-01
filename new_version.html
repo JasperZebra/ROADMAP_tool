@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Pro Roadmap Builder v3</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;}
+body{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;background:#cdd1d5;}
+
+/* ── Toolbar ──────────────────────────────────────────── */
+.tb{
+  position:fixed;top:0;left:0;right:0;z-index:300;
+  height:48px;background:#1e1f22;border-bottom:1px solid #111;
+  display:flex;align-items:center;gap:6px;padding:0 14px;
+}
+.tb-logo{font-size:14px;font-weight:700;color:#ddd;letter-spacing:.3px;margin-right:12px;}
+.tb-logo em{color:#7289da;font-style:normal;font-weight:400;}
+.tb-div{width:1px;height:24px;background:#333;margin:0 5px;}
+.btn{
+  height:30px;padding:0 12px;border-radius:4px;
+  border:1px solid #3a3a3a;background:#2b2d31;
+  color:#dbdee1;font-size:12px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:6px;white-space:nowrap;
+  transition:all .15s ease;
+}
+.btn:hover{background:#3a3c42;color:#fff;}
+.btn.active{background:#4752c4;border-color:#4752c4;color:#fff;}
+.btn.blue{background:#4752c4;border-color:#4752c4;color:#fff;}
+.btn.blue:hover{background:#5865f2;}
+.btn.green{background:#2e7d32;border-color:#2e7d32;color:#fff;}
+.btn.green:hover{background:#388e3c;}
+.btn:disabled{opacity:0.5;cursor:not-allowed;}
+.tb-r{margin-left:auto;display:flex;align-items:center;gap:4px;}
+.zl{font-size:12px;color:#999;width:42px;text-align:center;font-weight:600;}
+
+/* Brush Settings */
+.brush-ui { display:none; align-items:center; gap:6px; background:#111214; padding:0 8px; border-radius:4px; height:30px; }
+.brush-ui.active { display:flex; }
+.brush-ui input[type="color"] { width:24px; height:24px; padding:0; border:none; cursor:pointer; background:transparent;}
+.brush-ui input[type="range"] { width:60px; cursor:pointer; }
+.brush-label { color:#aaa; font-size:11px; font-weight:600;}
+
+/* ── Layout ───────────────────────────────────────────── */
+.ws{position:fixed;top:48px;left:0;right:0;bottom:0;display:flex;}
+.cw{flex:1;position:relative;overflow:hidden;background:#c8cbce;}
+canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
+
+/* ── Modal Editor ─────────────────────────────────────── */
+.modal-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.6); z-index:500;
+  display:none; align-items:center; justify-content:center;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.show { display:flex; }
+.modal {
+  background:#2b2d31; width:380px; border-radius:8px; padding:20px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.4); border:1px solid #1e1f22;
+  color:#dbdee1; display:flex; flex-direction:column; gap:12px;
+}
+.modal h3 { font-size:16px; font-weight:700; margin-bottom:4px; color:#fff; }
+.modal label { font-size:11px; font-weight:600; text-transform:uppercase; color:#949ba4; margin-bottom:-2px;}
+.modal input[type="text"], .modal textarea {
+  width:100%; background:#1e1f22; border:1px solid #111; color:#dbdee1;
+  padding:8px 10px; border-radius:4px; font-family:inherit; font-size:13px; outline:none;
+}
+.modal input[type="text"]:focus, .modal textarea:focus { border-color:#7289da; }
+.modal textarea { resize:vertical; min-height:50px; }
+.modal-row { display:flex; gap:12px; align-items:center; }
+.modal-row input[type="color"] { width:32px; height:32px; border:none; border-radius:4px; cursor:pointer; background:transparent;}
+.modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:10px; }
+
+/* ── Collaboration ────────────────────────────────────── */
+.presence-list { display:flex; align-items:center; gap:3px; }
+.user-avatar {
+  width:26px; height:26px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; color:#fff;
+  border:2px solid #1e1f22; cursor:default; flex-shrink:0;
+  position:relative;
+}
+.user-avatar::after {
+  content: attr(data-tip);
+  position:absolute; top:34px; left:50%; transform:translateX(-50%);
+  background:#111; color:#fff; padding:3px 8px; border-radius:4px;
+  white-space:nowrap; font-size:11px; pointer-events:none;
+  opacity:0; transition:opacity .15s; z-index:999;
+}
+.user-avatar:hover::after { opacity:1; }
+
+#name-overlay {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.8); z-index:700;
+  display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.name-modal {
+  background:#2b2d31; border-radius:12px; padding:32px;
+  width:320px; display:flex; flex-direction:column; gap:16px;
+  box-shadow:0 16px 48px rgba(0,0,0,0.6); border:1px solid #3a3c42;
+}
+.name-modal h2 { color:#fff; font-size:20px; font-weight:700; }
+.name-modal p { color:#949ba4; font-size:13px; line-height:1.6; }
+.name-modal input {
+  width:100%; background:#1e1f22; border:1px solid #3a3c42;
+  color:#fff; padding:10px 14px; border-radius:6px;
+  font-size:14px; outline:none; font-family:inherit;
+}
+.name-modal input:focus { border-color:#7289da; }
+
+#offline-badge {
+  display:none; background:#e05050; color:#fff;
+  font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px;
+  align-items:center; gap:4px;
+}
+#offline-badge.show { display:flex; }
+
+/* Dynamic Task List styling */
+.modal-tasks-container {
+  display: flex; flex-direction: column; gap:6px; max-height: 110px; 
+  overflow-y: auto; background: #1e1f22; padding: 6px; border-radius: 4px; border: 1px solid #111;
+}
+.modal-task-row { display: flex; align-items: center; gap: 6px; }
+.modal-task-row input[type="checkbox"] { cursor: pointer; width: 14px; height: 14px; }
+.modal-task-row input[type="text"] { padding: 4px 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="tb">
+  <span class="tb-logo">Roadmap <em>Pro</em></span>
+  <button class="btn" onclick="undo()" id="btn-undo" title="Undo">⤺ Undo</button>
+  <button class="btn" onclick="redo()" id="btn-redo" title="Redo">⤼ Redo</button>
+  <div class="tb-div"></div>
+  
+  <button class="btn" onclick="addNode()" title="Add Node">+ Node</button>
+  <button class="btn" onclick="triggerCanvasImgUpload()" title="Import Standalone Canvas ImageFrame">🖼️ + Image Frame</button>
+  <button class="btn" id="btn-img" onclick="triggerImgUpload()" title="Add Image to Selected Node">🖼️ Set Node Image</button>
+  
+  <div class="tb-div"></div>
+  <button class="btn" id="tool-select" onclick="setTool('select')">👆 Select / Move</button>
+  <button class="btn" id="tool-link" onclick="setTool('link')">🔗 Connect / Unlink</button>
+  <button class="btn" id="tool-draw" onclick="setTool('draw')">🖍️ Draw</button>
+  <button class="btn" id="tool-erase" onclick="setTool('erase')">🧽 Erase</button>
+  
+  <div class="brush-ui" id="brush-ui">
+    <input type="color" id="brush-color" value="#444c56" title="Brush Color">
+    <span class="brush-label">Size:</span>
+    <input type="range" id="brush-size" min="1" max="15" value="3" title="Brush Size">
+  </div>
+
+  <div class="tb-div"></div>
+  <button class="btn" onclick="deleteSelected()" title="Delete Selected">🗑️ Delete</button>
+
+  <div class="tb-r">
+    <div id="offline-badge">● Offline</div>
+    <div class="presence-list" id="presence-list"></div>
+    <div class="tb-div"></div>
+    <button class="btn" onclick="shareRoom()" id="btn-share" title="Copy share link">🔗 Share</button>
+    <div class="tb-div"></div>
+    <button class="btn blue" onclick="exportImage('png')">⬇️ PNG</button>
+    <button class="btn blue" onclick="exportImage('jpeg')">⬇️ JPEG</button>
+    <div class="tb-div"></div>
+    <button class="btn" onclick="openFile()">📂 Open JSON</button>
+    <button class="btn green" onclick="saveJSON()">💾 Save JSON</button>
+    <div class="tb-div"></div>
+    <button class="btn" onclick="zB(-0.1)">−</button>
+    <span class="zl" id="zl">100%</span>
+    <button class="btn" onclick="zB(0.1)">+</button>
+  </div>
+</div>
+
+<div class="ws">
+  <div class="cw" id="cw">
+    <canvas id="cv"></canvas>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h3>Edit Node</h3>
+    <label>Topic Title</label>
+    <input type="text" id="edit-title" placeholder="e.g. Texturing">
+    
+    <label>Description</label>
+    <textarea id="edit-desc" placeholder="Details about this step..."></textarea>
+    
+    <div class="modal-row">
+      <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+        <label>Category Label</label>
+        <input type="text" id="edit-cat" placeholder="e.g. PIPELINE">
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <label>Color</label>
+        <input type="color" id="edit-color">
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; margin: 2px 0;">
+      <input type="checkbox" id="edit-complete" style="cursor:pointer; width:16px; height:16px;">
+      <label for="edit-complete" style="text-transform:none; font-size:13px; color:#fff; cursor:pointer;">Mark Target Milestone as Complete</label>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <label>Tasks Checklist</label>
+      <button class="btn" style="height:20px; padding:0 8px; font-size:11px;" onclick="addModalTaskRow('', false)">+ Add Task</button>
+    </div>
+    <div class="modal-tasks-container" id="modal-tasks-list"></div>
+    
+    <div class="modal-actions">
+      <button class="btn" onclick="closeEdit()">Cancel</button>
+      <button class="btn blue" onclick="commitEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Name / Join overlay -->
+<div id="name-overlay">
+  <div class="name-modal">
+    <h2>Join Session</h2>
+    <p>Enter a display name so collaborators can see who you are on the canvas.</p>
+    <input type="text" id="name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <button class="btn blue" onclick="confirmName()" style="justify-content:center;height:40px;font-size:13px;font-weight:600;">Join →</button>
+  </div>
+</div>
+
+<input type="file" id="fi-json" accept=".json" style="display:none"/>
+<input type="file" id="fi-img" accept="image/*" style="display:none"/>
+<input type="file" id="fi-canvas-img" accept="image/*" style="display:none"/>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS & STATE
+// ═══════════════════════════════════════════════════════════
+const NW = 160, NH = 140; 
+const SCMIN = 0.05, SCMAX = 100;
+const COLORS = ['#4752c4', '#48a97a', '#5b82f5', '#9b6fd6', '#e05050', '#6b7280'];
+
+let nodes = [];
+let links = [];
+let strokes = [];
+let canvasImages = [];
+let _id = 1;
+
+let tool = 'select'; // 'select', 'link', 'draw', 'erase'
+let px = 120, py = 80, sc = 1;
+
+const imgCache = {};
+
+// ═══════════════════════════════════════════════════════════
+// HISTORY (UNDO / REDO)
+// ═══════════════════════════════════════════════════════════
+let historyStack = [];
+let historyIdx = -1;
+
+function saveState() {
+  const state = JSON.stringify({ nodes, links, strokes, canvasImages, _id });
+  if (historyIdx < historyStack.length - 1) {
+    historyStack = historyStack.slice(0, historyIdx + 1);
+  }
+  historyStack.push(state);
+  historyIdx++;
+  updateHistoryButtons();
+  broadcastState();
+}
+
+function loadState(stateStr) {
+  const d = JSON.parse(stateStr);
+  nodes = d.nodes || []; 
+  links = d.links || []; 
+  strokes = d.strokes || []; 
+  canvasImages = d.canvasImages || [];
+  _id = d._id || 1;
+  
+  nodes.forEach(n => { if (n.img && !imgCache[n.img]) cacheImage(n.img); });
+  canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
+  draw(); updateHistoryButtons();
+}
+
+function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); } }
+function redo() { if (historyIdx < historyStack.length - 1) { historyIdx++; loadState(historyStack[historyIdx]); } }
+function updateHistoryButtons() {
+  document.getElementById('btn-undo').disabled = historyIdx <= 0;
+  document.getElementById('btn-redo').disabled = historyIdx >= historyStack.length - 1;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANVAS & RENDERING
+// ═══════════════════════════════════════════════════════════
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const wrap = document.getElementById('cw');
+let W = 0, H = 0;
+
+function ws(wx, wy) { return { x: wx * sc + px, y: wy * sc + py }; }
+function sw(sx, sy) { return { x: (sx - px) / sc, y: (sy - py) / sc }; }
+function cpos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
+function resize() {
+  const r = wrap.getBoundingClientRect(); W = r.width; H = r.height;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+}
+window.addEventListener('resize', resize);
+
+function cacheImage(base64str) {
+  if (imgCache[base64str]) return imgCache[base64str];
+  const img = new Image(); img.src = base64str;
+  img.onload = () => draw();
+  imgCache[base64str] = img; return img;
+}
+
+function rr(c, x, y, w, h, r) {
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+function setTool(t) {
+  tool = t;
+  document.getElementById('tool-select').classList.remove('active');
+  document.getElementById('tool-link').classList.remove('active');
+  document.getElementById('tool-draw').classList.remove('active');
+  document.getElementById('tool-erase').classList.remove('active');
+  
+  if (document.getElementById(`tool-${t}`)) {
+    document.getElementById(`tool-${t}`).classList.add('active');
+  }
+  
+  document.getElementById('brush-ui').classList.toggle('active', t === 'draw' || t === 'erase');
+  
+  // Grey out color picker when erasing
+  document.getElementById('brush-color').style.opacity = t === 'erase' ? '0.2' : '1';
+  document.getElementById('brush-color').style.pointerEvents = t === 'erase' ? 'none' : 'auto';
+}
+setTool('select');
+
+// Standalone Image Transforms Tracker
+function getImgHandles(img) {
+  const cx = img.x + img.w / 2;
+  const cy = img.y + img.h / 2;
+  const cos = Math.cos(img.angle), sin = Math.sin(img.angle);
+  const padding = 8;
+  
+  // Bottom Right Resize Handle
+  const lx_s = img.w / 2 + padding;
+  const ly_s = img.h / 2 + padding;
+  
+  // Top Center Rotation Anchor Point
+  const lx_r = 0;
+  const ly_r = -img.h / 2 - padding - 22;
+  
+  return {
+    scale: ws(cx + lx_s * cos - ly_s * sin, cy + lx_s * sin + ly_s * cos),
+    rotate: ws(cx + lx_r * cos - ly_r * sin, cy + lx_r * sin + ly_r * cos)
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// DRAWING ENGINE PRIMITIVES
+// ═══════════════════════════════════════════════════════════
+function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
+  const Lws = (wx, wy) => ({ x: wx * sc + px, y: wy * sc + py });
+
+  // 1. Draw Brush Strokes (Including Erased Areas)
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  strokes.forEach(s => {
+    if (s.points.length === 0) return;
+    
+    ctx.beginPath();
+    // Allow single click dots for drawing and erasing
+    if (s.points.length === 1) {
+      const p = Lws(s.points[0].x, s.points[0].y);
+      ctx.arc(p.x, p.y, (s.width || 3) * sc / 2, 0, Math.PI * 2);
+      ctx.fillStyle = s.isEraser ? 'rgba(0,0,0,1)' : (s.color || '#404552');
+      if (s.isEraser) ctx.globalCompositeOperation = 'destination-out';
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+    
+    const p0 = Lws(s.points[0].x, s.points[0].y);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < s.points.length; i++) {
+      const p = Lws(s.points[i].x, s.points[i].y);
+      ctx.lineTo(p.x, p.y);
+    }
+    
+    if (s.isEraser) {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = s.color || '#404552';
+    }
+    
+    ctx.lineWidth = (s.width || 3) * sc;
+    ctx.stroke();
+    
+    // Reset immediately back to normal rendering state
+    ctx.globalCompositeOperation = 'source-over'; 
+  });
+  ctx.restore();
+
+  // 2. Draw Standalone Framed Images
+  canvasImages.forEach(img => {
+    const cx = img.x + img.w / 2;
+    const cy = img.y + img.h / 2;
+    
+    ctx.save();
+    ctx.translate(cx * sc + px, cy * sc + py);
+    ctx.rotate(img.angle);
+    
+    const iw = img.w * sc;
+    const ih = img.h * sc;
+    const pad = 8 * sc; // Sleek Outer Border Frame Ring Padding
+    
+    if (!isExport) {
+      ctx.shadowBlur = 10 * sc;
+      ctx.shadowColor = 'rgba(0,0,0,0.15)';
+      ctx.shadowOffsetY = 2 * sc;
+    }
+    
+    // Sleek Framing
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-iw/2 - pad, -ih/2 - pad, iw + pad*2, ih + pad*2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-iw/2 - pad, -ih/2 - pad, iw + pad*2, ih + pad*2);
+    
+    if (imgCache[img.src] && imgCache[img.src].complete) {
+      ctx.drawImage(imgCache[img.src], -iw/2, -ih/2, iw, ih);
+    } else {
+      ctx.fillStyle = '#eaeaea';
+      ctx.fillRect(-iw/2, -ih/2, iw, ih);
+    }
+    ctx.restore();
+    
+    // UI Gizmo Selection Overlays
+    if (img.selected && !isExport) {
+      ctx.save();
+      const h = getImgHandles(img);
+      
+      ctx.translate(cx * sc + px, cy * sc + py);
+      ctx.rotate(img.angle);
+      ctx.strokeStyle = '#4752c4';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(-iw/2 - pad - 2, -ih/2 - pad - 2, iw + pad*2 + 4, ih + pad*2 + 4);
+      ctx.restore();
+      
+      // Connection vector to rotation node handle
+      const topEdgeLocal = { x: 0, y: -img.h/2 - 8 };
+      const topEdgeWorld = Lws(cx + topEdgeLocal.x * Math.cos(img.angle) - topEdgeLocal.y * Math.sin(img.angle), cy + topEdgeLocal.x * Math.sin(img.angle) + topEdgeLocal.y * Math.cos(img.angle));
+      ctx.beginPath();
+      ctx.moveTo(topEdgeWorld.x, topEdgeWorld.y);
+      ctx.lineTo(h.rotate.x, h.rotate.y);
+      ctx.strokeStyle = '#4752c4';
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      
+      ctx.fillStyle = '#4752c4';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      
+      // Draw Handle Dots
+      ctx.beginPath(); ctx.arc(h.rotate.x, h.rotate.y, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(h.scale.x, h.scale.y, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+  });
+
+  // 3. Draw Connection Links
+  links.forEach(l => {
+    const n1 = nodes.find(n => n.id === l.from);
+    const n2 = nodes.find(n => n.id === l.to);
+    if (n1 && n2) {
+      const p1 = Lws(n1.x + n1.w, n1.y + n1.h / 2);
+      const p2 = Lws(n2.x, n2.y + n2.h / 2);
+      
+      // Dynamic styling rules: Incomplete targets override to dashed/dotted connection pipelines
+      const targetIncomplete = !n2.complete; 
+      bezConn(ctx, p1.x, p1.y, p2.x, p2.y, targetIncomplete, sc);
+    }
+  });
+
+  // 4. Draw Milestone Nodes
+  nodes.forEach(n => drawNodeOnCtx(ctx, n, Lws, sc, isExport));
+}
+
+function bezConn(c, ax, ay, bx, by, dashed, scale) {
+  const dx = bx - ax;
+  const cp = Math.max(30 * scale, Math.abs(dx) * 0.5);
+  c.save();
+  if (dashed) {
+    c.setLineDash([4 * scale, 4 * scale]); // Dotted configuration
+  }
+  c.beginPath(); c.moveTo(ax, ay);
+  c.bezierCurveTo(ax + cp, ay, bx - cp, by, bx, by);
+  c.strokeStyle = '#6a727d'; c.lineWidth = 2 * scale; c.stroke();
+  c.restore();
+  
+  const s = 6 * scale;
+  c.beginPath(); c.moveTo(bx, by); c.lineTo(bx - s, by - s * .5); c.lineTo(bx - s, by + s * .5);
+  c.closePath(); c.fillStyle = '#6a727d'; c.fill();
+}
+
+function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
+  const s = wsFunc(n.x, n.y);
+  const nw = n.w * scale, nh = n.h * scale;
+  const sel = n.selected && !isExport;
+
+  if (sel) {
+    c.save();
+    c.shadowBlur = 12 * scale; c.shadowColor = 'rgba(114,137,218,0.6)';
+    rr(c, s.x - 2, s.y - 2, nw + 4, nh + 4, 8 * scale);
+    c.strokeStyle = '#7289da'; c.lineWidth = 2.5; c.stroke();
+    c.restore();
+  }
+
+  // Base Node Card
+  c.save();
+  c.shadowBlur = 8 * scale; c.shadowColor = 'rgba(0,0,0,0.1)'; c.shadowOffsetY = 2 * scale;
+  c.fillStyle = '#ffffff';
+  rr(c, s.x, s.y, nw, nh, 6 * scale); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.05)'; c.lineWidth = 1; c.stroke();
+  
+  // Category Accent Pill Header
+  const pad = 10 * scale, pillY = s.y + 8 * scale, pillH = 14 * scale;
+  c.fillStyle = n.color || COLORS[0];
+  rr(c, s.x + pad, pillY, nw - pad * 2, pillH, 3 * scale); c.fill();
+  
+  c.fillStyle = '#fff';
+  c.font = `700 ${7 * scale}px system-ui`; c.textBaseline = 'middle';
+  c.fillText(n.cat || 'CATEGORY', s.x + pad + 4 * scale, pillY + pillH / 2);
+
+  // Milestone Title
+  c.fillStyle = '#111';
+  c.font = `800 ${11 * scale}px system-ui`; c.textBaseline = 'top';
+  c.fillText(n.name, s.x + pad, pillY + pillH + 6 * scale);
+
+  // Attached Inner Image Media Element
+  const imgAreaY = pillY + pillH + 24 * scale;
+  const imgAreaH = nh - (imgAreaY - s.y) - 34 * scale; 
+  
+  if (n.img && imgCache[n.img] && imgCache[n.img].complete) {
+    const img = imgCache[n.img];
+    c.save();
+    rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.clip();
+    
+    // Math.min guarantees 'object-fit: contain' behavior
+    // so the image is fully visible without any cropping.
+    const iscale = Math.min((nw - pad*2) / img.width, imgAreaH / img.height);
+    
+    const dw = img.width * iscale, dh = img.height * iscale;
+    const dx = s.x + pad + ((nw - pad*2) - dw)/2;
+    const dy = imgAreaY + (imgAreaH - dh)/2;
+    c.drawImage(img, dx, dy, dw, dh);
+    c.restore();
+  } else {
+    c.fillStyle = '#f0f1f3';
+    rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.fill();
+  }
+
+  // Modular Checklist Task String Sub-render
+  if (n.tasks && n.tasks.length > 0) {
+    const total = n.tasks.length;
+    const resolved = n.tasks.filter(t => t.done).length;
+    
+    c.fillStyle = '#4752c4';
+    c.font = `700 ${8 * scale}px system-ui`;
+    c.fillText(`📋 ${resolved}/${total} Tasks`, s.x + pad, s.y + nh - 30 * scale);
+    
+    // Dynamic Micro Progress Fill Meter
+    c.fillStyle = '#e3e5e8';
+    rr(c, s.x + pad, s.y + nh - 20 * scale, nw - pad * 2, 3 * scale, 1.5 * scale); c.fill();
+    c.fillStyle = resolved === total ? '#2e7d32' : '#4752c4';
+    rr(c, s.x + pad, s.y + nh - 20 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
+  } else {
+    // Standard Text Context Fallback
+    c.fillStyle = '#666'; c.font = `500 ${8.5 * scale}px system-ui`;
+    c.fillText(n.desc || 'Double-click to edit...', s.x + pad, s.y + nh - 24 * scale);
+  }
+  c.restore();
+
+  // Bottom-Docked Green Completion Tab / Accent Ring Styling
+  if (n.complete) {
+    c.save();
+    // Accent Core Card Ring
+    c.strokeStyle = '#2e7d32';
+    c.lineWidth = 1.5 * scale;
+    rr(c, s.x, s.y, nw, nh, 6 * scale);
+    c.stroke();
+
+    // Bottom-Docked Tab Elements Block
+    c.fillStyle = '#2e7d32';
+    const tabW = nw - 24 * scale;
+    const tabH = 16 * scale;
+    const tabX = s.x + (nw - tabW) / 2;
+    const tabY = s.y + nh;
+    
+    c.beginPath();
+    c.moveTo(tabX, tabY);
+    c.lineTo(tabX + tabW, tabY);
+    c.arcTo(tabX + tabW, tabY + tabH, tabX, tabY + tabH, 4 * scale);
+    c.arcTo(tabX, tabY + tabH, tabX, tabY, 4 * scale);
+    c.closePath();
+    c.fill();
+    
+    c.fillStyle = '#ffffff';
+    c.font = `700 ${8 * scale}px system-ui`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText('✓ COMPLETE', tabX + tabW / 2, tabY + tabH / 2);
+    c.restore();
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  renderAll(ctx, nodes, links, strokes, sc, px, py, false);
+  
+  if (_tempLink) {
+    bezConn(ctx, _tempLink.p1.x, _tempLink.p1.y, _tempLink.p2.x, _tempLink.p2.y, false, sc);
+  }
+  
+  if (_selBox) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(114,137,218,0.2)';
+    ctx.fillRect(_selBox.x, _selBox.y, _selBox.w, _selBox.h);
+    ctx.strokeStyle = '#7289da'; ctx.lineWidth = 1.5; ctx.setLineDash([4,4]);
+    ctx.strokeRect(_selBox.x, _selBox.y, _selBox.w, _selBox.h);
+    ctx.restore();
+  }
+
+  renderRemoteCursors();
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROCESSING ALGORITHMS
+// ═══════════════════════════════════════════════════════════
+function getDownstreamTree(startIds) {
+  const tree = new Set(startIds);
+  const queue = [...startIds];
+  while(queue.length > 0) {
+    const curr = queue.shift();
+    links.forEach(l => {
+      if(l.from === curr && !tree.has(l.to)) {
+        tree.add(l.to); queue.push(l.to);
+      }
+    });
+  }
+  return tree;
+}
+
+// ═══════════════════════════════════════════════════════════
+// INTERACTION STATE REGISTRY
+// ═══════════════════════════════════════════════════════════
+let _dn = null, _isDrag = false, _dragGroup = [];
+let _panning = false, _panStart = {x:0,y:0}, _panOrig = {px:0,py:0};
+let _tempLink = null, _linkStartNode = null;
+let _drawing = false, _curStroke = null;
+let _selBoxStart = null, _selBox = null;
+
+// Standalone Image Transformation Locks
+let _activeImg = null;
+let _imgMode = null; // 'move', 'scale', 'rotate'
+let _startAngle = 0, _startMouseAngle = 0;
+let _startW = 0, _startH = 0, _startDist = 0;
+let _imgOffsetX = 0, _imgOffsetY = 0;
+
+function hitNode(sx, sy) {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i], s = ws(n.x, n.y);
+    if (sx >= s.x && sx <= s.x + n.w * sc && sy >= s.y && sy <= s.y + n.h * sc) return n;
+  }
+  return null;
+}
+
+cv.addEventListener('mousedown', e => {
+  if (document.getElementById('modal-overlay').classList.contains('show')) return;
+  const p = cpos(e);
+  
+  if (e.button === 2) {
+    _panning = true; _panStart = p; _panOrig = { px, py };
+    wrap.style.cursor = 'grabbing'; return;
+  }
+  
+  if (tool === 'draw' || tool === 'erase') {
+    _drawing = true;
+    _curStroke = { 
+      points: [sw(p.x, p.y)], 
+      color: document.getElementById('brush-color').value, 
+      width: parseFloat(document.getElementById('brush-size').value),
+      isEraser: tool === 'erase' // Tag as an erasure path
+    };
+    strokes.push(_curStroke);
+    draw(); // Render dot immediately
+    return;
+  }
+  
+  const wm = sw(p.x, p.y);
+  
+  // A. Check if user clicked standalone transformation handles
+  for (let i = canvasImages.length - 1; i >= 0; i--) {
+    const img = canvasImages[i];
+    if (img.selected) {
+      const h = getImgHandles(img);
+      // Scale testing
+      if (Math.hypot(p.x - h.scale.x, p.y - h.scale.y) < 10) {
+        _activeImg = img; _imgMode = 'scale';
+        _startW = img.w; _startH = img.h;
+        _startDist = Math.hypot(wm.x - (img.x + img.w/2), wm.y - (img.y + img.h/2));
+        return;
+      }
+      // Rotation testing
+      if (Math.hypot(p.x - h.rotate.x, p.y - h.rotate.y) < 10) {
+        _activeImg = img; _imgMode = 'rotate';
+        _startAngle = img.angle;
+        _startMouseAngle = Math.atan2(wm.y - (img.y + img.h/2), wm.x - (img.x + img.w/2));
+        return;
+      }
+    }
+  }
+  
+  // B. Check inner bounds hit for standalone canvas pictures
+  let hitImageObj = null;
+  for (let i = canvasImages.length - 1; i >= 0; i--) {
+    const img = canvasImages[i];
+    const cx = img.x + img.w / 2, cy = img.y + img.h / 2;
+    const dx = wm.x - cx, dy = wm.y - cy;
+    const cos = Math.cos(-img.angle), sin = Math.sin(-img.angle);
+    const lx = dx * cos - dy * sin;
+    const ly = dx * sin + dy * cos;
+    
+    if (Math.abs(lx) <= img.w/2 + 8 && Math.abs(ly) <= img.h/2 + 8) {
+      hitImageObj = img;
+      break;
+    }
+  }
+  
+  if (hitImageObj && tool === 'select') {
+    if (!e.shiftKey) {
+      nodes.forEach(x => x.selected = false);
+      canvasImages.forEach(x => x.selected = false);
+    }
+    hitImageObj.selected = true;
+    _activeImg = hitImageObj; _imgMode = 'move';
+    _imgOffsetX = hitImageObj.x - wm.x;
+    _imgOffsetY = hitImageObj.y - wm.y;
+    draw(); return;
+  }
+  
+  // C. Fallback processing to Nodes framework
+  const n = hitNode(p.x, p.y);
+  
+  if (tool === 'link') {
+    if (n) {
+      _linkStartNode = n;
+      _tempLink = { p1: ws(n.x + n.w, n.y + n.h / 2), p2: { x: p.x, y: p.y } };
+    }
+    return;
+  }
+
+  if (n) {
+    if (!e.shiftKey) canvasImages.forEach(x => x.selected = false);
+    _dn = n; _isDrag = false;
+    
+    if (!n.selected && !e.shiftKey) {
+      nodes.forEach(x => x.selected = false);
+      n.selected = true;
+    }
+    
+    const activeSelectedIds = nodes.filter(x => x.selected).map(x => x.id);
+    const setIds = getDownstreamTree(activeSelectedIds);
+    
+    const w = sw(p.x, p.y);
+    _dragGroup = Array.from(setIds).map(id => {
+      const node = nodes.find(x => x.id === id);
+      return { node, offX: node.x - w.x, offY: node.y - w.y };
+    });
+    
+  } else {
+    if (!e.shiftKey) {
+      nodes.forEach(x => x.selected = false);
+      canvasImages.forEach(x => x.selected = false);
+    }
+    _selBoxStart = { x: p.x, y: p.y };
+  }
+  draw();
+});
+
+window.addEventListener('mousemove', e => {
+  const p = cpos(e);
+  const _wc = sw(p.x, p.y); broadcastCursor(_wc.x, _wc.y);
+
+  if (_panning) {
+    px = _panOrig.px + (p.x - _panStart.x);
+    py = _panOrig.py + (p.y - _panStart.y);
+    draw(); return;
+  }
+  
+  if (_drawing && _curStroke) {
+    _curStroke.points.push(sw(p.x, p.y));
+    draw(); return;
+  }
+  
+  if (_tempLink) {
+    _tempLink.p2 = { x: p.x, y: p.y };
+    draw(); return;
+  }
+  
+  if (_activeImg) {
+    const wm = sw(p.x, p.y);
+    const cx = _activeImg.x + _activeImg.w / 2;
+    const cy = _activeImg.y + _activeImg.h / 2;
+    
+    if (_imgMode === 'move') {
+      _activeImg.x = wm.x + _imgOffsetX;
+      _activeImg.y = wm.y + _imgOffsetY;
+    } else if (_imgMode === 'rotate') {
+      const currentMouseAngle = Math.atan2(wm.y - cy, wm.x - cx);
+      _activeImg.angle = _startAngle + (currentMouseAngle - _startMouseAngle);
+    } else if (_imgMode === 'scale') {
+      const currentDist = Math.hypot(wm.x - cx, wm.y - cy);
+      const ratio = currentDist / _startDist;
+      
+      const minRatio = Math.max(30 / _startW, 30 / _startH);
+      const finalRatio = Math.max(minRatio, ratio);
+      
+      _activeImg.w = _startW * finalRatio;
+      _activeImg.h = _startH * finalRatio;
+      _activeImg.x = cx - _activeImg.w / 2;
+      _activeImg.y = cy - _activeImg.h / 2;
+    }
+    draw(); return;
+  }
+  
+  if (_selBoxStart) {
+    _selBox = {
+      x: Math.min(_selBoxStart.x, p.x), y: Math.min(_selBoxStart.y, p.y),
+      w: Math.abs(p.x - _selBoxStart.x), h: Math.abs(p.y - _selBoxStart.y)
+    };
+    draw(); return;
+  }
+
+  if (_dn && _dragGroup.length > 0) {
+    _isDrag = true;
+    const w = sw(p.x, p.y);
+    _dragGroup.forEach(item => {
+      item.node.x = w.x + item.offX;
+      item.node.y = w.y + item.offY;
+    });
+    draw();
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  if (e.button === 2) { _panning = false; wrap.style.cursor = 'default'; }
+  if (_drawing) { _drawing = false; _curStroke = null; saveState(); }
+  if (_activeImg) { _activeImg = null; _imgMode = null; saveState(); }
+  
+  if (_tempLink) {
+    const p = cpos(e); const n2 = hitNode(p.x, p.y);
+    if (n2 && n2 !== _linkStartNode) {
+      // Check if link already exists
+      const existingLinkIdx = links.findIndex(l => l.from === _linkStartNode.id && l.to === n2.id);
+      
+      if (existingLinkIdx >= 0) {
+        // Toggle behavior: if it exists, disconnect them
+        links.splice(existingLinkIdx, 1);
+        saveState();
+      } else {
+        // Otherwise, connect them
+        links.push({ from: _linkStartNode.id, to: n2.id });
+        saveState();
+      }
+    }
+    _tempLink = null; _linkStartNode = null; draw();
+  }
+
+  if (_selBox) {
+    const bw = { x: sw(_selBox.x, _selBox.y).x, y: sw(_selBox.x, _selBox.y).y, 
+                 w: _selBox.w / sc, h: _selBox.h / sc };
+    nodes.forEach(n => {
+      if (n.x < bw.x + bw.w && n.x + n.w > bw.x && n.y < bw.y + bw.h && n.y + n.h > bw.y) {
+        n.selected = true;
+      }
+    });
+    canvasImages.forEach(img => {
+      if (img.x < bw.x + bw.w && img.x + img.w > bw.x && img.y < bw.y + bw.h && img.y + img.h > bw.y) {
+        img.selected = true;
+      }
+    });
+    _selBox = null; _selBoxStart = null; draw();
+  } else {
+    _selBoxStart = null;
+  }
+
+  if (_dn && _isDrag) { saveState(); }
+  _dn = null; _isDrag = false; _dragGroup = [];
+});
+
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+// ═══════════════════════════════════════════════════════════
+// MODAL CONTROLLER & TASK MANAGER INTERFACES
+// ═══════════════════════════════════════════════════════════
+let _et = null;
+const modal = document.getElementById('modal-overlay');
+
+cv.addEventListener('dblclick', e => {
+  const p = cpos(e); const n = hitNode(p.x, p.y);
+  if (n) startEdit(n);
+});
+
+function startEdit(n) {
+  _et = n;
+  document.getElementById('edit-title').value = n.name || '';
+  document.getElementById('edit-desc').value = n.desc || '';
+  document.getElementById('edit-cat').value = n.cat || '';
+  document.getElementById('edit-color').value = n.color || COLORS[0];
+  document.getElementById('edit-complete').checked = !!n.complete;
+  
+  // Rehydrate Task Element Children
+  const container = document.getElementById('modal-tasks-list');
+  container.innerHTML = '';
+  if (n.tasks && n.tasks.length > 0) {
+    n.tasks.forEach(t => addModalTaskRow(t.text, t.done));
+  }
+  
+  modal.classList.add('show');
+  document.getElementById('edit-title').focus();
+}
+
+function addModalTaskRow(text = '', done = false) {
+  const container = document.getElementById('modal-tasks-list');
+  const row = document.createElement('div');
+  row.className = 'modal-task-row';
+  
+  const chk = document.createElement('input');
+  chk.type = 'checkbox'; chk.checked = done;
+  
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.value = text; inp.placeholder = 'Describe criteria...';
+  inp.style.flex = '1';
+  
+  const del = document.createElement('button');
+  del.innerHTML = '✕'; del.className = 'btn';
+  del.style.cssText = 'height:22px; width:22px; padding:0; justify-content:center;';
+  del.onclick = () => row.remove();
+  
+  row.appendChild(chk);
+  row.appendChild(inp);
+  row.appendChild(del);
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+}
+
+function commitEdit() {
+  if (!_et) return;
+  _et.name = document.getElementById('edit-title').value.trim() || 'Untitled';
+  _et.desc = document.getElementById('edit-desc').value.trim();
+  _et.cat = document.getElementById('edit-cat').value.trim().toUpperCase() || 'CATEGORY';
+  _et.color = document.getElementById('edit-color').value;
+  _et.complete = document.getElementById('edit-complete').checked;
+  
+  // Serialize active tasks list rows
+  const container = document.getElementById('modal-tasks-list');
+  const rows = container.querySelectorAll('.modal-task-row');
+  const compiledTasks = [];
+  rows.forEach(r => {
+    const txtVal = r.querySelector('input[type="text"]').value.trim();
+    const checked = r.querySelector('input[type="checkbox"]').checked;
+    if (txtVal) {
+      compiledTasks.push({ text: txtVal, done: checked });
+    }
+  });
+  _et.tasks = compiledTasks;
+  
+  closeEdit(); saveState(); draw();
+}
+
+function closeEdit() { modal.classList.remove('show'); _et = null; }
+
+document.getElementById('edit-title').addEventListener('keydown', e => {
+  if (e.key === 'Enter') commitEdit();
+});
+
+// ═══════════════════════════════════════════════════════════
+// LIFECYCLE & CORE DATA MGMT
+// ═══════════════════════════════════════════════════════════
+function addNode() {
+  const vp = sw(W/2, H/2);
+  const color = COLORS[nodes.length % COLORS.length];
+  nodes.push({
+    id: _id++, x: vp.x - NW/2, y: vp.y - NH/2, w: NW, h: NH,
+    name: 'New Milestone', desc: 'Double click to edit details.', cat: 'TOPIC', color, selected: false,
+    complete: false, tasks: []
+  });
+  saveState(); draw();
+}
+
+function deleteSelected() {
+  const selNodes = nodes.filter(n => n.selected).map(n => n.id);
+  nodes = nodes.filter(n => !n.selected);
+  links = links.filter(l => !selNodes.includes(l.from) && !selNodes.includes(l.to));
+  canvasImages = canvasImages.filter(img => !img.selected);
+  saveState(); draw();
+}
+
+document.addEventListener('keydown', e => {
+  if (modal.classList.contains('show')) {
+    if (e.key === 'Escape') closeEdit(); return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace')) deleteSelected();
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+});
+
+cv.addEventListener('wheel', e => {
+  if (modal.classList.contains('show')) return;
+  e.preventDefault(); const p = cpos(e);
+  
+  const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+  let ns = sc * zoomFactor;
+  ns = Math.max(SCMIN, Math.min(SCMAX, ns));
+  
+  const r = ns / sc; px = p.x - r * (p.x - px); py = p.y - r * (p.y - py); sc = ns;
+  draw(); document.getElementById('zl').textContent = Math.round(sc * 100) + '%';
+}, { passive: false });
+
+function zB(d) {
+  let ns = d > 0 ? sc * 1.2 : sc * 0.8; 
+  ns = Math.max(SCMIN, Math.min(SCMAX, ns));
+  const r = ns / sc; px = W / 2 - r * (W / 2 - px); py = H / 2 - r * (H / 2 - py); sc = ns;
+  draw(); document.getElementById('zl').textContent = Math.round(sc * 100) + '%';
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANVAS INDEPENDENT STANDALONE FILE PIPELINE 
+// ═══════════════════════════════════════════════════════════
+function triggerCanvasImgUpload() {
+  document.getElementById('fi-canvas-img').click();
+}
+document.getElementById('fi-canvas-img').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  
+  reader.onload = ev => {
+    const base64str = ev.target.result;
+    
+    const imgObj = new Image();
+    imgObj.onload = () => {
+      const vp = sw(W/2, H/2);
+      let iw = imgObj.width;
+      let ih = imgObj.height;
+      
+      const maxInitialDimension = 300;
+      if (iw > maxInitialDimension || ih > maxInitialDimension) {
+        const ratio = Math.min(maxInitialDimension / iw, maxInitialDimension / ih);
+        iw *= ratio;
+        ih *= ratio;
+      }
+
+      canvasImages.push({
+        id: 'img_' + Date.now(),
+        x: vp.x - iw/2, y: vp.y - ih/2, w: iw, h: ih, angle: 0,
+        src: base64str, selected: true
+      });
+      cacheImage(base64str);
+      saveState(); draw();
+    };
+    imgObj.src = base64str;
+  };
+  
+  reader.readAsDataURL(file); e.target.value = '';
+});
+
+// Embedded Node Specific Image Uploads
+const fiImg = document.getElementById('fi-img');
+function triggerImgUpload() {
+  const sel = nodes.find(n => n.selected);
+  if (!sel) return alert("Select a target milestone node first to attach inside graphics.");
+  fiImg.click();
+}
+fiImg.addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const sel = nodes.find(n => n.selected);
+    if (sel) { sel.img = ev.target.result; cacheImage(sel.img); saveState(); }
+  };
+  reader.readAsDataURL(file); e.target.value = '';
+});
+
+function saveJSON() {
+  const d = { v: 4, nodes, links, strokes, canvasImages, _id };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
+  a.download = 'roadmap_pro.json'; a.click();
+}
+
+function openFile() { document.getElementById('fi-json').click(); }
+document.getElementById('fi-json').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try { historyStack = []; historyIdx = -1; loadState(ev.target.result); saveState(); } 
+    catch { alert('Could not read JSON data template structure.'); }
+  };
+  r.readAsText(f); e.target.value = '';
+});
+
+function exportImage(format) {
+  if (nodes.length === 0 && strokes.length === 0 && canvasImages.length === 0) return alert("Nothing to export.");
+  
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  nodes.forEach(n => {
+    minX=Math.min(minX, n.x); minY=Math.min(minY, n.y);
+    maxX=Math.max(maxX, n.x+n.w); maxY=Math.max(maxY, n.y+n.h);
+  });
+  strokes.forEach(s => s.points.forEach(p => {
+    minX=Math.min(minX, p.x); minY=Math.min(minY, p.y);
+    maxX=Math.max(maxX, p.x); maxY=Math.max(maxY, p.y);
+  }));
+  canvasImages.forEach(img => {
+    const rad = Math.hypot(img.w, img.h) / 2 + 16;
+    const cx = img.x + img.w / 2, cy = img.y + img.h / 2;
+    minX=Math.min(minX, cx - rad); minY=Math.min(minY, cy - rad);
+    maxX=Math.max(maxX, cx + rad); maxY=Math.max(maxY, cy + rad);
+  });
+
+  const pad = 120;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const bw = maxX - minX, bh = maxY - minY;
+  
+  const EX = 2; 
+  
+  // Create an initial transparent canvas and render scene (without forcing background color)
+  const oc = document.createElement('canvas');
+  oc.width = bw * EX; oc.height = bh * EX;
+  const octx = oc.getContext('2d');
+  
+  // Passing 'true' guarantees we don't render selection boxes
+  renderAll(octx, nodes, links, strokes, EX, -minX * EX, -minY * EX, true);
+  
+  // Now create a bottom layer for the solid export color 
+  // This prevents the new 'destination-out' eraser from punching transparent holes in exports
+  const baseCanvas = document.createElement('canvas');
+  baseCanvas.width = oc.width; baseCanvas.height = oc.height;
+  const baseCtx = baseCanvas.getContext('2d');
+  
+  baseCtx.fillStyle = '#c8cbce';
+  baseCtx.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
+  baseCtx.drawImage(oc, 0, 0);
+  
+  const a = document.createElement('a');
+  a.href = baseCanvas.toDataURL('image/' + format, format==='jpeg'?0.95:1);
+  a.download = 'roadmap_export.' + format;
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════
+// REALTIME COLLABORATION  (Firebase Realtime Database)
+// ═══════════════════════════════════════════════════════════
+//
+//  SETUP (takes ~2 minutes, completely free):
+//  1. Go to https://console.firebase.google.com
+//  2. Click "Add project" → give it any name → Continue
+//  3. Disable Google Analytics (optional) → Create project
+//  4. Click "Web" (</>)  → register app → copy the firebaseConfig object
+//  5. In the left sidebar: Build → Realtime Database → Create database
+//     → Choose a region → Start in TEST MODE → Enable
+//  6. Paste your config values below, replacing the placeholders
+//
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyDTd8bdNHK6xIG5sd_j2_LZ6uy4aVQGMGw",
+  authDomain:        "roadmap-53f16.firebaseapp.com",
+  databaseURL:       "https://roadmap-53f16-default-rtdb.firebaseio.com",
+  projectId:         "roadmap-53f16",
+  storageBucket:     "roadmap-53f16.firebasestorage.app",
+  messagingSenderId: "708743782367",
+  appId:             "1:708743782367:web:f89c95edaeefdefd326e6a"
+};
+
+// ── User identity ────────────────────────────────────────
+const COLLAB_COLORS = [
+  '#e05050','#48a97a','#f5a623','#9b6fd6',
+  '#00bcd4','#e91e63','#ff9800','#03a9f4','#8bc34a','#ff5722'
+];
+
+let _db = null;
+let roomId = '';
+let myUser = { id: '', name: '', color: '' };
+const remoteCursors = {}; // uid → { name, color, wx, wy }
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('rm_collab_user') || 'null'); } catch { return null; }
+}
+
+function initMyUser(name) {
+  let stored = getStoredUser() || {
+    id: Math.random().toString(36).slice(2, 12),
+    color: COLLAB_COLORS[Math.floor(Math.random() * COLLAB_COLORS.length)]
+  };
+  stored.name = name || stored.name || 'User';
+  localStorage.setItem('rm_collab_user', JSON.stringify(stored));
+  myUser = stored;
+}
+
+function getRoomId() {
+  let hash = location.hash.replace(/^#/, '');
+  if (!hash) { hash = Math.random().toString(36).slice(2, 8); location.hash = hash; }
+  return hash;
+}
+
+// ── Name prompt ──────────────────────────────────────────
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmName();
+});
+
+function confirmName() {
+  const name = document.getElementById('name-input').value.trim() || 'User';
+  initMyUser(name);
+  document.getElementById('name-overlay').style.display = 'none';
+  startFirebase();
+}
+
+// ── Share room ───────────────────────────────────────────
+function shareRoom() {
+  if (!location.hash) getRoomId();
+  navigator.clipboard.writeText(location.href).then(() => {
+    const btn = document.getElementById('btn-share');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('active');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2200);
+  }).catch(() => {
+    prompt('Copy this link to share:', location.href);
+  });
+}
+
+// ── Remote cursor rendering ──────────────────────────────
+function renderRemoteCursors() {
+  Object.values(remoteCursors).forEach(u => {
+    const s = ws(u.wx, u.wy);
+    ctx.save();
+
+    ctx.fillStyle = u.color;
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(s.x,      s.y);
+    ctx.lineTo(s.x + 11, s.y + 4);
+    ctx.lineTo(s.x + 4,  s.y + 11);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    const label = u.name || 'User';
+    ctx.font = 'bold 11px system-ui';
+    const lw = ctx.measureText(label).width + 12;
+    rr(ctx, s.x + 13, s.y + 9, lw, 17, 4);
+    ctx.fillStyle = u.color; ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, s.x + 19, s.y + 17.5);
+
+    ctx.restore();
+  });
+}
+
+// ── Presence bar ─────────────────────────────────────────
+function updatePresenceBar() {
+  const bar = document.getElementById('presence-list');
+  bar.innerHTML = '';
+
+  const mkDot = (name, color, tip) => {
+    const d = document.createElement('div');
+    d.className = 'user-avatar';
+    d.style.background = color;
+    d.setAttribute('data-tip', tip);
+    d.textContent = (name || '?')[0].toUpperCase();
+    return d;
+  };
+
+  bar.appendChild(mkDot(myUser.name, myUser.color, myUser.name + ' (you)'));
+  Object.values(remoteCursors).forEach(u => {
+    bar.appendChild(mkDot(u.name, u.color, u.name));
+  });
+}
+
+// ── State broadcast (debounced 150 ms) ───────────────────
+let _broadcastTimer = null;
+function broadcastState() {
+  if (!_db) return;
+  clearTimeout(_broadcastTimer);
+  _broadcastTimer = setTimeout(() => {
+    _db.ref('rooms/' + roomId + '/state')
+      .set({ nodes, links, strokes, canvasImages, _id })
+      .catch(() => {});
+  }, 150);
+}
+
+// ── Cursor broadcast (throttled ~30 fps) ─────────────────
+let _lastCursorMs = 0;
+function broadcastCursor(wx, wy) {
+  if (!_db) return;
+  const now = Date.now();
+  if (now - _lastCursorMs < 33) return;
+  _lastCursorMs = now;
+  _db.ref('rooms/' + roomId + '/cursors/' + myUser.id)
+    .set({ wx, wy })
+    .catch(() => {});
+}
+
+// ── Firebase init & listeners ────────────────────────────
+function startFirebase() {
+  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+    document.getElementById('offline-badge').classList.add('show');
+    console.warn(
+      '%c Roadmap Pro — Offline mode ',
+      'background:#e05050;color:#fff;font-weight:bold;',
+      '\nFirebase is not configured. Edit FIREBASE_CONFIG in the HTML to enable live collaboration.'
+    );
+    return;
+  }
+
+  try { firebase.app(); } catch { firebase.initializeApp(FIREBASE_CONFIG); }
+  _db = firebase.database();
+  roomId = getRoomId();
+
+  const myPresRef = _db.ref('rooms/' + roomId + '/presence/' + myUser.id);
+  myPresRef.set({ name: myUser.name, color: myUser.color });
+  myPresRef.onDisconnect().remove();
+  _db.ref('rooms/' + roomId + '/cursors/' + myUser.id).onDisconnect().remove();
+
+  // Canvas state sync
+  _db.ref('rooms/' + roomId + '/state').on('value', snap => {
+    const data = snap.val();
+    if (!data) {
+      broadcastState();
+      return;
+    }
+    nodes        = data.nodes        || [];
+    links        = data.links        || [];
+    strokes      = data.strokes      || [];
+    canvasImages = data.canvasImages || [];
+    _id          = data._id          || 1;
+    nodes.forEach(n => { if (n.img && !imgCache[n.img]) cacheImage(n.img); });
+    canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
+    draw();
+  });
+
+  // User presence (join / leave)
+  _db.ref('rooms/' + roomId + '/presence').on('value', snap => {
+    const data = snap.val() || {};
+    Object.keys(remoteCursors).forEach(uid => {
+      if (!data[uid]) delete remoteCursors[uid];
+    });
+    Object.entries(data).forEach(([uid, user]) => {
+      if (uid === myUser.id) return;
+      if (!remoteCursors[uid]) remoteCursors[uid] = { wx: 0, wy: 0 };
+      remoteCursors[uid].name  = user.name  || 'User';
+      remoteCursors[uid].color = user.color || '#999';
+    });
+    updatePresenceBar();
+    draw();
+  });
+
+  // Live cursor positions
+  _db.ref('rooms/' + roomId + '/cursors').on('value', snap => {
+    const data = snap.val() || {};
+    Object.entries(data).forEach(([uid, cur]) => {
+      if (uid === myUser.id) return;
+      if (remoteCursors[uid]) {
+        remoteCursors[uid].wx = cur.wx || 0;
+        remoteCursors[uid].wy = cur.wy || 0;
+      }
+    });
+    draw();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════
+resize();
+(function initDemo() {
+  nodes.push({ id: _id++, x: 100, y: 220, w: NW, h: NH, name: 'Main Objective', desc: 'Core operational pipeline.', cat: 'MILESTONE', color: '#4752c4', complete: true, tasks: [] });
+  nodes.push({ id: _id++, x: 440, y: 130, w: NW, h: NH, name: 'Bug Fix #01', desc: 'Memory leaks on viewport resize.', cat: 'BUG FIX', color: '#e05050', complete: false, tasks: [] });
+  nodes.push({ id: _id++, x: 440, y: 340, w: NW, h: NH, name: 'Bug Fix #02', desc: 'Render artifacting shader error.', cat: 'BUG FIX', color: '#e05050', complete: false, tasks: [] });
+  
+  links.push({ from: 1, to: 2 });
+  links.push({ from: 1, to: 3 });
+  saveState(); draw();
+})();
+
+// Boot: show name prompt, or skip if name already stored
+(function boot() {
+  const stored = getStoredUser();
+  if (stored && stored.name) {
+    initMyUser(stored.name);
+    document.getElementById('name-overlay').style.display = 'none';
+    startFirebase();
+    updatePresenceBar();
+  }
+  // else: name-overlay is visible by default, confirmName() handles the rest
+})();
+</script>
+</body>
+</html>
