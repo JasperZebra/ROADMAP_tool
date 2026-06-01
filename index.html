@@ -620,11 +620,13 @@ function toggleComplete(id, currently) {
 function fireConfetti() {
   const colors = ['#f5a623','#4752c4','#48a97a','#e05050','#9b6fd6','#fff','#ffd700'];
   const burst = (x, angle) => confetti({
-    particleCount: 120,
+    particleCount: 180,
     angle,
-    spread: 70,
+    spread: 110,
+    startVelocity: 60,
+    ticks: 200,
     origin: { x, y: 1 },
-    scalar: 3.2,
+    scalar: 2,
     colors
   });
   burst(0.15,  65);
