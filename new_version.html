@@ -704,18 +704,28 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
   const pad = 10 * scale, pillY = s.y + 8 * scale, pillH = 14 * scale;
   c.fillStyle = n.color || COLORS[0];
   rr(c, s.x + pad, pillY, nw - pad * 2, pillH, 3 * scale); c.fill();
-  
+
+  // Clip pill text so long labels never overflow the pill
+  c.save();
+  rr(c, s.x + pad, pillY, nw - pad * 2, pillH, 3 * scale); c.clip();
   c.fillStyle = '#fff';
   c.font = `700 ${9 * scale}px system-ui`; c.textBaseline = 'middle';
   c.fillText(n.cat || 'CATEGORY', s.x + pad + 4 * scale, pillY + pillH / 2);
+  c.restore();
 
-  // Milestone Title
+  // Milestone Title — wrap to 2 lines, clip to node width
+  const titleFontSize = 14 * scale;
+  const titleLineH   = titleFontSize * 1.45;
   c.fillStyle = '#111';
-  c.font = `800 ${14 * scale}px system-ui`; c.textBaseline = 'top';
-  c.fillText(n.name, s.x + pad, pillY + pillH + 6 * scale);
+  c.font = `800 ${titleFontSize}px system-ui`; c.textBaseline = 'top';
+  c.save();
+  // Clip title to node card bounds so it can never bleed outside
+  rr(c, s.x, s.y, nw, nh, 6 * scale); c.clip();
+  wrapText(c, n.name || 'Untitled', s.x + pad, pillY + pillH + 5 * scale, nw - pad * 2, titleLineH, 2);
+  c.restore();
 
-  // Attached Inner Image Media Element
-  const imgAreaY = pillY + pillH + 24 * scale;
+  // Attached Inner Image Media Element — starts below 2-line title budget
+  const imgAreaY = pillY + pillH + 5 * scale + titleLineH * 2 + 4 * scale;
   const imgAreaH = nh - (imgAreaY - s.y) - 34 * scale; 
   
   if (n.img && imgCache[n.img] && imgCache[n.img].complete) {
@@ -763,8 +773,10 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     // Dynamic Micro Progress Fill Meter
     c.fillStyle = '#e3e5e8';
     rr(c, s.x + pad, s.y + nh - 20 * scale, nw - pad * 2, 3 * scale, 1.5 * scale); c.fill();
-    c.fillStyle = resolved === total ? '#2e7d32' : '#4752c4';
-    rr(c, s.x + pad, s.y + nh - 20 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
+    if (resolved > 0) {
+      c.fillStyle = resolved === total ? '#2e7d32' : '#4752c4';
+      rr(c, s.x + pad, s.y + nh - 20 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
+    }
   } else if (n.img) {
     // Image is shown above — show description as wrapped text at bottom
     c.save();
