@@ -115,6 +115,10 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 .card-nodes{font-size:11px;color:#72767d;}
 .card-presence{display:flex;gap:3px;flex-wrap:wrap;min-height:20px;}
 .card-meta{font-size:11px;color:#5c6068;margin-top:auto;}
+.card-complete-star{position:absolute;top:10px;right:38px;font-size:14px;pointer-events:none;}
+.project-card.completed{border-color:#f5a623;}
+.project-card.archived{opacity:0.5;}
+.archived-badge{font-size:10px;background:#3a3c42;color:#949ba4;padding:1px 6px;border-radius:4px;font-weight:600;}
 
 /* ── List row ─────────────────────────────────────────── */
 .list-row{
@@ -243,6 +247,7 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
     <span class="section-title">Projects</span>
   </div>
   <div class="toolbar-right">
+    <button class="btn" id="archived-toggle" onclick="toggleShowArchived()" title="Show archived projects">📦 Show Archived</button>
     <select class="sort-select" id="sort-select" onchange="setSortBy(this.value)">
       <option value="lastModified">Last Modified</option>
       <option value="created">Date Created</option>
@@ -330,6 +335,7 @@ let _allPresence = {};
 let sortBy = localStorage.getItem('rm_sort') || 'lastModified';
 let viewMode = localStorage.getItem('rm_view') || 'grid';
 let searchQuery = '';
+let showArchived = false;
 
 // ── User identity ─────────────────────────────────────────
 function getStoredUser() {
@@ -412,6 +418,9 @@ function render() {
   updateViewButtons();
   let entries = Object.entries(_allProjects);
 
+  // Filter archived
+  entries = entries.filter(([, p]) => showArchived ? !!p.archived : !p.archived);
+
   // Filter by search
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
@@ -451,12 +460,18 @@ function makeCard(id, proj) {
     `<div class="pres-dot" style="background:${u.color||'#999'}" data-tip="${esc(u.name||'User')}">${(u.name||'?')[0].toUpperCase()}</div>`
   ).join('');
 
+  const completed  = !!proj.completed;
+  const archived   = !!proj.archived;
+  const lastEditBy = proj.lastEditedBy ? `· edited by ${esc(proj.lastEditedBy)}` : '';
+
   const el = document.createElement('div');
-  el.className = 'project-card' + (pinned ? ' pinned' : '');
+  el.className = 'project-card' + (pinned?' pinned':'') + (completed?' completed':'') + (archived?' archived':'');
   el.innerHTML = `
+    ${completed ? '<div class="card-complete-star" title="Completed">⭐</div>' : ''}
     <div class="card-top">
       <button class="card-pin-btn ${pinned?'pinned':''}" onclick="togglePin('${id}',${pinned})" title="${pinned?'Unpin':'Pin to top'}">📌</button>
       <div class="card-spacer"></div>
+      ${archived ? '<span class="archived-badge">Archived</span>' : ''}
       <div class="card-color-wrap">
         <div class="card-color-dot" style="background:${color}" onclick="this.nextElementSibling.click()" title="Change color"></div>
         <input type="color" class="card-color-input" value="${color}" onchange="changeColor('${id}',this.value)">
@@ -467,6 +482,9 @@ function makeCard(id, proj) {
           <div class="dd-item" onclick="startRename('${id}');closeDD()">✏️ Rename</div>
           <div class="dd-item" onclick="duplicateProject('${id}');closeDD()">⧉ Duplicate</div>
           <div class="dd-sep"></div>
+          <div class="dd-item" onclick="toggleComplete('${id}',${completed});closeDD()">${completed?'✅ Mark Incomplete':'⭐ Mark Complete'}</div>
+          <div class="dd-item" onclick="toggleArchive('${id}',${archived});closeDD()">${archived?'📤 Unarchive':'📦 Archive'}</div>
+          <div class="dd-sep"></div>
           <div class="dd-item danger" onclick="showDeleteModal('${id}','${esc(proj.name)}');closeDD()">🗑️ Delete</div>
         </div>
       </div>
@@ -475,7 +493,7 @@ function makeCard(id, proj) {
     <div class="card-name" id="name-${id}" ondblclick="startRename('${id}')">${esc(proj.name)}</div>
     <div class="card-nodes">${nodes} node${nodes===1?'':'s'}</div>
     <div class="card-presence">${presHtml}</div>
-    <div class="card-meta">by ${esc(proj.createdBy||'Unknown')} · ${timeAgo(proj.lastModified)}</div>
+    <div class="card-meta">${timeAgo(proj.lastModified)} ${lastEditBy}</div>
   `;
   el.addEventListener('click', e => {
     if (e.target.closest('.card-pin-btn') || e.target.closest('.dropdown') ||
@@ -542,7 +560,7 @@ function createProject() {
   const id = Math.random().toString(36).slice(2, 10);
   const color = ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)];
   const now = Date.now();
-  _db.ref('projects/' + id).set({ name, color, created: now, lastModified: now, createdBy: myUser.name, nodeCount: 0, pinned: false })
+  _db.ref('projects/' + id).set({ name, color, created: now, lastModified: now, createdBy: myUser.name, nodeCount: 0, pinned: false, completed: false, archived: false })
     .then(() => { hideNewProjectModal(); openProject(id); });
 }
 
@@ -580,6 +598,19 @@ function duplicateProject(id) {
 
 function togglePin(id, currentlyPinned) {
   _db.ref('projects/' + id + '/pinned').set(!currentlyPinned).catch(() => {});
+}
+function toggleComplete(id, currently) {
+  _db.ref('projects/' + id + '/completed').set(!currently).catch(() => {});
+}
+function toggleArchive(id, currently) {
+  _db.ref('projects/' + id + '/archived').set(!currently).catch(() => {});
+}
+function toggleShowArchived() {
+  showArchived = !showArchived;
+  const btn = document.getElementById('archived-toggle');
+  btn.classList.toggle('active', showArchived);
+  btn.textContent = showArchived ? '📦 Hide Archived' : '📦 Show Archived';
+  render();
 }
 
 function changeColor(id, color) {
