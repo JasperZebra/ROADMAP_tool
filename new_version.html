@@ -370,7 +370,7 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 // ═══════════════════════════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════════════════════════
-const NW = 160, NH = 140; 
+const NW = 200, NH = 175;
 const SCMIN = 0.05, SCMAX = 100;
 const COLORS = ['#4752c4', '#48a97a', '#5b82f5', '#9b6fd6', '#e05050', '#6b7280'];
 
@@ -686,12 +686,12 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
   rr(c, s.x + pad, pillY, nw - pad * 2, pillH, 3 * scale); c.fill();
   
   c.fillStyle = '#fff';
-  c.font = `700 ${7 * scale}px system-ui`; c.textBaseline = 'middle';
+  c.font = `700 ${9 * scale}px system-ui`; c.textBaseline = 'middle';
   c.fillText(n.cat || 'CATEGORY', s.x + pad + 4 * scale, pillY + pillH / 2);
 
   // Milestone Title
   c.fillStyle = '#111';
-  c.font = `800 ${11 * scale}px system-ui`; c.textBaseline = 'top';
+  c.font = `800 ${14 * scale}px system-ui`; c.textBaseline = 'top';
   c.fillText(n.name, s.x + pad, pillY + pillH + 6 * scale);
 
   // Attached Inner Image Media Element
@@ -723,7 +723,7 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     const resolved = n.tasks.filter(t => t.done).length;
     
     c.fillStyle = '#4752c4';
-    c.font = `700 ${8 * scale}px system-ui`;
+    c.font = `700 ${10 * scale}px system-ui`;
     c.fillText(`📋 ${resolved}/${total} Tasks`, s.x + pad, s.y + nh - 30 * scale);
     
     // Dynamic Micro Progress Fill Meter
@@ -733,7 +733,7 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     rr(c, s.x + pad, s.y + nh - 20 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
   } else {
     // Standard Text Context Fallback
-    c.fillStyle = '#666'; c.font = `500 ${8.5 * scale}px system-ui`;
+    c.fillStyle = '#666'; c.font = `500 ${11 * scale}px system-ui`;
     c.fillText(n.desc || 'Double-click to edit...', s.x + pad, s.y + nh - 24 * scale);
   }
   c.restore();
@@ -763,7 +763,7 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     c.fill();
     
     c.fillStyle = '#ffffff';
-    c.font = `700 ${8 * scale}px system-ui`;
+    c.font = `700 ${10 * scale}px system-ui`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     c.fillText('✓ COMPLETE', tabX + tabW / 2, tabY + tabH / 2);
