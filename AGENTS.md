@@ -172,6 +172,8 @@ The eraser uses `globalCompositeOperation = 'destination-out'` which punches tra
 ### Tool System
 `tool` can be: `'select'`, `'link'`, `'draw'`, `'erase'`
 
+The link tool button is labeled **"Link/Unlink"** — clicking an existing link endpoint removes it; clicking a new pair creates one. The toolbar button text reflects both actions.
+
 - `setTool(t)` updates the active tool and adjusts brush UI visibility
 - WASD pan, scroll zoom, and right-click pan work regardless of active tool
 - Right-click on a node opens the context menu (not pan)
