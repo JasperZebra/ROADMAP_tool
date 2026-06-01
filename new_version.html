@@ -1444,9 +1444,11 @@ fiImg.addEventListener('change', e => {
 
 function saveJSON() {
   const d = { v: 4, nodes, links, strokes, canvasImages, _id };
+  const raw = (document.getElementById('project-name-label').textContent || 'roadmap').trim();
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'roadmap';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
-  a.download = 'roadmap_pro.json'; a.click();
+  a.download = slug + '_roadmap.json'; a.click();
 }
 
 function openFile() { document.getElementById('fi-json').click(); }
