@@ -728,6 +728,8 @@ let _panning = false, _panStart = {x:0,y:0}, _panOrig = {px:0,py:0};
 let _tempLink = null, _linkStartNode = null;
 let _drawing = false, _curStroke = null;
 let _selBoxStart = null, _selBox = null;
+let _clipboard = [];
+let _mouseWorld = { x: 0, y: 0 };
 
 // Standalone Image Transformation Locks
 let _activeImg = null;
@@ -860,6 +862,7 @@ cv.addEventListener('mousedown', e => {
 window.addEventListener('mousemove', e => {
   const p = cpos(e);
   const _wc = sw(p.x, p.y); broadcastCursor(_wc.x, _wc.y);
+  _mouseWorld.x = _wc.x; _mouseWorld.y = _wc.y;
 
   if (_panning) {
     px = _panOrig.px + (p.x - _panStart.x);
@@ -1076,12 +1079,53 @@ function deleteSelected() {
   saveState(); draw();
 }
 
+function copySelected() {
+  const sel = nodes.filter(n => n.selected);
+  if (!sel.length) return;
+  _clipboard = sel.map(n => Object.assign({}, n, {
+    tasks: (n.tasks || []).map(t => Object.assign({}, t))
+  }));
+}
+
+function pasteClipboard() {
+  if (!_clipboard.length) return;
+  const cx = _clipboard.reduce((s, n) => s + n.x + n.w / 2, 0) / _clipboard.length;
+  const cy = _clipboard.reduce((s, n) => s + n.y + n.h / 2, 0) / _clipboard.length;
+  const dx = _mouseWorld.x - cx;
+  const dy = _mouseWorld.y - cy;
+  nodes.forEach(n => n.selected = false);
+  _clipboard.forEach(n => {
+    nodes.push(Object.assign({}, n, {
+      id: _id++, x: n.x + dx, y: n.y + dy, selected: true,
+      tasks: (n.tasks || []).map(t => Object.assign({}, t))
+    }));
+  });
+  saveState(); draw();
+}
+
+function dupeSelected() {
+  const sel = nodes.filter(n => n.selected);
+  if (!sel.length) return;
+  nodes.forEach(n => n.selected = false);
+  sel.forEach(n => {
+    nodes.push(Object.assign({}, n, {
+      id: _id++, x: n.x + 20, y: n.y + 20, selected: true,
+      tasks: (n.tasks || []).map(t => Object.assign({}, t))
+    }));
+  });
+  saveState(); draw();
+}
+
 document.addEventListener('keydown', e => {
   if (modal.classList.contains('show')) {
     if (e.key === 'Escape') closeEdit(); return;
   }
-  if ((e.key === 'Delete' || e.key === 'Backspace')) deleteSelected();
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c') { e.preventDefault(); copySelected(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v') { e.preventDefault(); pasteClipboard(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); dupeSelected(); }
 });
 
 // ── WASD Camera Movement ──────────────────────────────────
