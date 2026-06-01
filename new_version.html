@@ -1357,6 +1357,11 @@ function startFirebase() {
 
   // Canvas state sync
   _db.ref('rooms/' + roomId + '/state').on('value', snap => {
+    // Don't overwrite local state while the user is mid-action —
+    // the incoming data is our own broadcast bouncing back, and applying
+    // it would break active object references (_curStroke, _dragGroup, etc.)
+    if (_drawing || _dn || _activeImg) return;
+
     const data = snap.val();
     if (!data) {
       broadcastState();
