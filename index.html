@@ -129,6 +129,8 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 }
 .list-row:hover{background:#313338;border-color:#4752c4;}
 .list-row.pinned{border-color:#f5a623;}
+.list-row.completed{border-color:#f5a623;}
+.list-row.archived{opacity:0.5;}
 .list-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
 .list-name{font-size:13px;font-weight:600;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .list-nodes{font-size:11px;color:#72767d;width:70px;flex-shrink:0;}
@@ -504,22 +506,29 @@ function makeCard(id, proj) {
 }
 
 function makeListRow(id, proj) {
-  const color    = proj.color || ACCENT_COLORS[0];
-  const pinned   = !!proj.pinned;
-  const nodes    = proj.nodeCount || 0;
-  const presence = _allPresence[id] || {};
-  const presHtml = Object.values(presence).slice(0,4).map(u =>
+  const color      = proj.color || ACCENT_COLORS[0];
+  const pinned     = !!proj.pinned;
+  const completed  = !!proj.completed;
+  const archived   = !!proj.archived;
+  const nodes      = proj.nodeCount || 0;
+  const presence   = _allPresence[id] || {};
+  const lastEditBy = proj.lastEditedBy ? `· ${esc(proj.lastEditedBy)}` : '';
+  const presHtml   = Object.values(presence).slice(0,4).map(u =>
     `<div class="pres-dot" style="background:${u.color||'#999'}" data-tip="${esc(u.name||'User')}">${(u.name||'?')[0].toUpperCase()}</div>`
   ).join('');
 
   const el = document.createElement('div');
-  el.className = 'list-row' + (pinned ? ' pinned' : '');
+  el.className = 'list-row' + (pinned?' pinned':'') + (completed?' completed':'') + (archived?' archived':'');
   el.innerHTML = `
     <div class="list-dot" style="background:${color}"></div>
-    <div class="list-name">${esc(proj.name)}</div>
+    <div class="list-name">
+      ${esc(proj.name)}
+      ${completed ? ' <span title="Completed" style="font-size:13px;">⭐</span>' : ''}
+      ${archived  ? ' <span class="archived-badge">Archived</span>' : ''}
+    </div>
     <div class="list-nodes">${nodes} nodes</div>
     <div class="list-presence">${presHtml}</div>
-    <div class="list-meta">${timeAgo(proj.lastModified)}</div>
+    <div class="list-meta">${timeAgo(proj.lastModified)} ${lastEditBy}</div>
     <div class="list-actions">
       <button class="btn icon" onclick="togglePin('${id}',${pinned})" title="${pinned?'Unpin':'Pin'}" style="font-size:13px;color:${pinned?'#f5a623':'#5c6068'}">📌</button>
       <div class="dropdown">
@@ -527,6 +536,9 @@ function makeListRow(id, proj) {
         <div class="dropdown-menu" id="ddl-${id}">
           <div class="dd-item" onclick="startRename('${id}');closeDD()">✏️ Rename</div>
           <div class="dd-item" onclick="duplicateProject('${id}');closeDD()">⧉ Duplicate</div>
+          <div class="dd-sep"></div>
+          <div class="dd-item" onclick="toggleComplete('${id}',${completed});closeDD()">${completed?'✅ Mark Incomplete':'⭐ Mark Complete'}</div>
+          <div class="dd-item" onclick="toggleArchive('${id}',${archived});closeDD()">${archived?'📤 Unarchive':'📦 Archive'}</div>
           <div class="dd-sep"></div>
           <div class="dd-item danger" onclick="showDeleteModal('${id}','${esc(proj.name)}');closeDD()">🗑️ Delete</div>
         </div>
