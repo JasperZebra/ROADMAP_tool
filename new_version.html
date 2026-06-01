@@ -122,7 +122,15 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 }
 #offline-badge.show { display:flex; }
 
-/* ── Context Menu ─────────────────────────────────────── */
+/* ── Context Menus ────────────────────────────────────── */
+#group-ctx-menu {
+  position:fixed;z-index:600;
+  background:#111214;border:1px solid #3a3c42;border-radius:7px;
+  padding:4px;min-width:160px;
+  box-shadow:0 8px 28px rgba(0,0,0,0.55);
+  display:none;flex-direction:column;gap:1px;
+}
+#group-ctx-menu.show{display:flex;}
 #ctx-menu {
   position:fixed;z-index:600;
   background:#111214;border:1px solid #3a3c42;border-radius:7px;
@@ -270,6 +278,7 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
     <button class="btn" onclick="toggleDD('dd-add')">+ Add ▾</button>
     <div class="dropdown-menu" id="dd-add">
       <div class="dd-item" onclick="addNode();closeDD()">⬜ Blank Node</div>
+      <div class="dd-item" onclick="addGroup();closeDD()">▭ Group Box</div>
       <div class="dd-sep"></div>
       <div class="dd-item has-sub">📦 From Template ›
         <div class="dd-submenu">
@@ -391,6 +400,30 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   </div>
 </div>
 
+<!-- Group context menu -->
+<div id="group-ctx-menu">
+  <div class="dd-item" onclick="openGroupEditCtx()">✏️ Edit Group</div>
+  <div class="dd-sep"></div>
+  <div class="dd-item danger" onclick="deleteGroupCtx()">🗑️ Delete</div>
+</div>
+
+<!-- Group edit modal -->
+<div class="modal-overlay" id="group-modal-overlay">
+  <div class="modal" style="width:300px;">
+    <h3>Edit Group</h3>
+    <label>Label</label>
+    <input type="text" id="group-edit-title" placeholder="Group name...">
+    <div class="modal-row" style="align-items:center;gap:10px;">
+      <label style="margin:0;">Color</label>
+      <input type="color" id="group-edit-color" style="width:36px;height:36px;border:none;border-radius:4px;cursor:pointer;background:transparent;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeGroupEdit()">Cancel</button>
+      <button class="btn blue" onclick="commitGroupEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Right-click context menu -->
 <div id="ctx-menu">
   <div class="dd-item" id="ctx-edit"    onclick="ctxEdit()">✏️ Edit</div>
@@ -445,6 +478,7 @@ let nodes = [];
 let links = [];
 let strokes = [];
 let canvasImages = [];
+let groups = [];
 let favoriteColors = ['#4752c4','#48a97a','#e05050','#e8a838','#9b6fd6','#5b82f5','#6b7280','#ffffff'];
 let _id = 1;
 
@@ -479,12 +513,15 @@ function wrapLines(c, text, maxW) {
 
 function updateNodeText(n) {
   const pad = 10, maxW = NW - pad * 2;
+  // Measure at identity transform so DPR/zoom don't skew line widths
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.font = `700 9px system-ui`;
   n.catLines  = wrapLines(ctx, n.cat  || 'CATEGORY', maxW - 8);
   ctx.font = `800 14px system-ui`;
   n.titleLines = wrapLines(ctx, n.name || 'Untitled', maxW);
   ctx.font = `500 10px system-ui`;
   n.descLines  = wrapLines(ctx, n.desc || 'Double-click to edit...', maxW - 10);
+  ctx.restore();
   n.descScroll = n.descScroll || 0;
 
   let cy = 8;
@@ -505,7 +542,7 @@ let historyStack = [];
 let historyIdx = -1;
 
 function saveState() {
-  const state = JSON.stringify({ nodes, links, strokes, canvasImages, _id, favoriteColors });
+  const state = JSON.stringify({ nodes, links, strokes, canvasImages, groups, _id, favoriteColors });
   if (historyIdx < historyStack.length - 1) {
     historyStack = historyStack.slice(0, historyIdx + 1);
   }
@@ -524,6 +561,7 @@ function loadState(stateStr) {
   _id = d._id || 1;
   
   if (d.favoriteColors && d.favoriteColors.length) favoriteColors = d.favoriteColors;
+  groups = d.groups || [];
   nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
   canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
   renderFavColors();
@@ -746,10 +784,60 @@ function getImgHandles(img) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// GROUP BOX RENDERING & HIT TESTING
+// ═══════════════════════════════════════════════════════════
+function hexToRgba(hex, alpha) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.slice(0,2),16), g2 = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g2},${b},${alpha})`;
+}
+
+function drawGroup(c, g, scl, ppx, ppy, isExport) {
+  const sx = g.x * scl + ppx, sy = g.y * scl + ppy;
+  const gw = g.w * scl, gh = g.h * scl, rad = 10 * scl;
+  c.save();
+  c.fillStyle = hexToRgba(g.color, 0.1);
+  rr(c, sx, sy, gw, gh, rad); c.fill();
+  c.strokeStyle = hexToRgba(g.color, 0.55);
+  c.lineWidth = 2 * scl;
+  rr(c, sx, sy, gw, gh, rad); c.stroke();
+  const bandH = 28 * scl;
+  c.save(); rr(c, sx, sy, gw, gh, rad); c.clip();
+  c.fillStyle = hexToRgba(g.color, 0.22); c.fillRect(sx, sy, gw, bandH);
+  c.restore();
+  c.fillStyle = hexToRgba(g.color, 0.95);
+  c.font = `700 ${13 * scl}px system-ui`; c.textBaseline = 'middle'; c.textAlign = 'left';
+  c.fillText(g.title || 'Group', sx + 10 * scl, sy + bandH / 2);
+  if (g.selected && !isExport) {
+    c.strokeStyle = '#7289da'; c.lineWidth = 1.5 * scl; c.setLineDash([5 * scl, 3 * scl]);
+    rr(c, sx - 2, sy - 2, gw + 4, gh + 4, rad); c.stroke(); c.setLineDash([]);
+    c.fillStyle = '#7289da'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+    c.beginPath(); c.arc(sx + gw, sy + gh, 6, 0, Math.PI * 2); c.fill(); c.stroke();
+  }
+  c.restore();
+}
+
+function hitGroupBody(sx, sy) {
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const g = groups[i];
+    const gsx = g.x * sc + px, gsy = g.y * sc + py;
+    if (sx >= gsx && sx <= gsx + g.w * sc && sy >= gsy && sy <= gsy + g.h * sc) return g;
+  }
+  return null;
+}
+
+function hitGroupResizeHandle(sx, sy, g) {
+  return Math.hypot(sx - (g.x * sc + px + g.w * sc), sy - (g.y * sc + py + g.h * sc)) < 10;
+}
+
+// ═══════════════════════════════════════════════════════════
 // DRAWING ENGINE PRIMITIVES
 // ═══════════════════════════════════════════════════════════
 function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
   const Lws = (wx, wy) => ({ x: wx * sc + px, y: wy * sc + py });
+
+  // 0. Draw Group Boxes (background, behind everything)
+  groups.forEach(g => drawGroup(ctx, g, sc, px, py, isExport));
 
   // 1. Draw Brush Strokes (Including Erased Areas)
   ctx.save();
@@ -1083,6 +1171,9 @@ let _selBoxStart = null, _selBox = null;
 let _clipboard = [];
 let _mouseWorld = { x: 0, y: 0 };
 let _mouseScreen = { x: 0, y: 0 };
+let _activeGroup = null, _groupMode = null;
+let _groupOffX = 0, _groupOffY = 0;
+let _groupStartW = 0, _groupStartH = 0, _groupResizeStart = {x:0,y:0};
 
 // Standalone Image Transformation Locks
 let _activeImg = null;
@@ -1104,7 +1195,8 @@ cv.addEventListener('mousedown', e => {
   const p = cpos(e);
   
   if (e.button === 2) {
-    if (hitNode(p.x, p.y)) return; // context menu will handle right-click on nodes
+    if (hitNode(p.x, p.y)) return;
+    if (hitGroupBody(p.x, p.y)) return; // let contextmenu handle group right-clicks
     _panning = true; _panStart = p; _panOrig = { px, py };
     wrap.style.cursor = 'grabbing'; return;
   }
@@ -1205,9 +1297,33 @@ cv.addEventListener('mousedown', e => {
     });
     
   } else {
+    if (tool === 'select') {
+      // Check group resize handle first
+      for (let i = groups.length - 1; i >= 0; i--) {
+        if (hitGroupResizeHandle(p.x, p.y, groups[i])) {
+          _activeGroup = groups[i]; _groupMode = 'resize';
+          _groupStartW = groups[i].w; _groupStartH = groups[i].h;
+          _groupResizeStart = { x: p.x, y: p.y };
+          groups.forEach(g => g.selected = g === _activeGroup);
+          nodes.forEach(x => x.selected = false); canvasImages.forEach(x => x.selected = false);
+          draw(); return;
+        }
+      }
+      // Check group body
+      const hg = hitGroupBody(p.x, p.y);
+      if (hg) {
+        _activeGroup = hg; _groupMode = 'move';
+        const wm2 = sw(p.x, p.y);
+        _groupOffX = hg.x - wm2.x; _groupOffY = hg.y - wm2.y;
+        groups.forEach(g => g.selected = g === hg);
+        nodes.forEach(x => x.selected = false); canvasImages.forEach(x => x.selected = false);
+        draw(); return;
+      }
+    }
     if (!e.shiftKey) {
       nodes.forEach(x => x.selected = false);
       canvasImages.forEach(x => x.selected = false);
+      groups.forEach(g => g.selected = false);
     }
     _selBoxStart = { x: p.x, y: p.y };
   }
@@ -1280,6 +1396,17 @@ window.addEventListener('mousemove', e => {
     broadcastStateLive(); draw();
   }
 
+  if (_activeGroup) {
+    const wm3 = sw(p.x, p.y);
+    if (_groupMode === 'move') {
+      _activeGroup.x = wm3.x + _groupOffX; _activeGroup.y = wm3.y + _groupOffY;
+    } else if (_groupMode === 'resize') {
+      _activeGroup.w = Math.max(80, _groupStartW + (p.x - _groupResizeStart.x) / sc);
+      _activeGroup.h = Math.max(60, _groupStartH + (p.y - _groupResizeStart.y) / sc);
+    }
+    broadcastStateLive(); draw(); return;
+  }
+
   // Keep eraser cursor circle moving even when not drawing
   if (tool === 'erase') draw();
 });
@@ -1288,6 +1415,7 @@ window.addEventListener('mouseup', e => {
   if (e.button === 2) { _panning = false; wrap.style.cursor = 'default'; }
   if (_drawing) { _drawing = false; _curStroke = null; saveState(); }
   if (_activeImg) { _activeImg = null; _imgMode = null; saveState(); }
+  if (_activeGroup) { _activeGroup = null; _groupMode = null; saveState(); }
   
   if (_tempLink) {
     const p = cpos(e); const n2 = hitNode(p.x, p.y);
@@ -1334,12 +1462,9 @@ cv.addEventListener('contextmenu', e => {
   e.preventDefault();
   const p = cpos(e);
   const n = hitNode(p.x, p.y);
-  if (n) {
-    nodes.forEach(x => x.selected = false);
-    n.selected = true;
-    draw();
-    showCtxMenu(e.clientX, e.clientY, n);
-  }
+  if (n) { nodes.forEach(x => x.selected = false); n.selected = true; draw(); showCtxMenu(e.clientX, e.clientY, n); return; }
+  const g = hitGroupBody(p.x, p.y);
+  if (g) { groups.forEach(x => x.selected = false); g.selected = true; draw(); showGroupCtxMenu(e.clientX, e.clientY, g); }
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1349,8 +1474,11 @@ let _et = null;
 const modal = document.getElementById('modal-overlay');
 
 cv.addEventListener('dblclick', e => {
-  const p = cpos(e); const n = hitNode(p.x, p.y);
-  if (n) startEdit(n);
+  const p = cpos(e);
+  const n = hitNode(p.x, p.y);
+  if (n) { startEdit(n); return; }
+  const g = hitGroupBody(p.x, p.y);
+  if (g) openGroupEdit(g);
 });
 
 function startEdit(n) {
@@ -1451,6 +1579,7 @@ function deleteSelected() {
   nodes = nodes.filter(n => !n.selected);
   links = links.filter(l => !selNodes.includes(l.from) && !selNodes.includes(l.to));
   canvasImages = canvasImages.filter(img => !img.selected);
+  groups = groups.filter(g => !g.selected);
   saveState(); draw();
 }
 
@@ -1659,6 +1788,10 @@ function exportImage(format) {
     minX=Math.min(minX, cx - rad); minY=Math.min(minY, cy - rad);
     maxX=Math.max(maxX, cx + rad); maxY=Math.max(maxY, cy + rad);
   });
+  groups.forEach(g => {
+    minX=Math.min(minX,g.x); minY=Math.min(minY,g.y);
+    maxX=Math.max(maxX,g.x+g.w); maxY=Math.max(maxY,g.y+g.h);
+  });
 
   const pad = 120;
   minX -= pad; minY -= pad; maxX += pad; maxY += pad;
@@ -1824,6 +1957,7 @@ function serializeState() {
     links,
     strokes,
     canvasImages: canvasImages.map(img => Object.assign({}, img, { selected: false })),
+    groups: groups.map(g => Object.assign({}, g, { selected: false })),
     _id,
     favoriteColors
   };
@@ -1995,6 +2129,58 @@ function addFromTemplate(key) {
   nodes.push(newNode);
   saveState(); draw();
 }
+
+// ── Group Box ─────────────────────────────────────────────
+let _editGroup = null;
+
+function addGroup() {
+  const vp = sw(W/2, H/2);
+  groups.push({ id: 'g_' + Date.now(), x: vp.x - 150, y: vp.y - 100, w: 300, h: 200, title: 'Group', color: '#4752c4', selected: true });
+  groups.slice(0,-1).forEach(g => g.selected = false);
+  saveState(); draw();
+}
+
+function openGroupEdit(g) {
+  _editGroup = g;
+  document.getElementById('group-edit-title').value = g.title || '';
+  document.getElementById('group-edit-color').value = g.color || '#4752c4';
+  document.getElementById('group-modal-overlay').classList.add('show');
+  document.getElementById('group-edit-title').focus();
+}
+
+function commitGroupEdit() {
+  if (!_editGroup) return;
+  _editGroup.title = document.getElementById('group-edit-title').value.trim() || 'Group';
+  _editGroup.color = document.getElementById('group-edit-color').value;
+  closeGroupEdit(); saveState(); draw();
+}
+
+function closeGroupEdit() {
+  document.getElementById('group-modal-overlay').classList.remove('show');
+  _editGroup = null;
+}
+
+document.getElementById('group-edit-title').addEventListener('keydown', e => {
+  if (e.key === 'Enter') commitGroupEdit();
+  if (e.key === 'Escape') closeGroupEdit();
+});
+
+let _ctxGroup = null;
+function showGroupCtxMenu(x, y, g) {
+  _ctxGroup = g;
+  const menu = document.getElementById('group-ctx-menu');
+  menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  menu.classList.add('show');
+  requestAnimationFrame(() => {
+    const r = menu.getBoundingClientRect();
+    if (r.right  > window.innerWidth)  menu.style.left = (x - r.width)  + 'px';
+    if (r.bottom > window.innerHeight) menu.style.top  = (y - r.height) + 'px';
+  });
+}
+function closeGroupCtxMenu() { document.getElementById('group-ctx-menu').classList.remove('show'); _ctxGroup = null; }
+function openGroupEditCtx() { const g = _ctxGroup; closeGroupCtxMenu(); if (g) openGroupEdit(g); }
+function deleteGroupCtx() { if (_ctxGroup) { groups = groups.filter(g => g !== _ctxGroup); saveState(); draw(); } closeGroupCtxMenu(); }
+document.addEventListener('click', () => closeGroupCtxMenu());
 
 // ── Shortcut Overlay ──────────────────────────────────────
 function openShortcuts()  { document.getElementById('shortcut-overlay').classList.add('show'); }
