@@ -131,7 +131,10 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 <body>
 
 <div class="tb">
-  <span class="tb-logo">Roadmap <em>Pro</em></span>
+  <a href="index.html" class="btn" style="text-decoration:none;padding:0 10px;">← Projects</a>
+  <div class="tb-div"></div>
+  <span id="project-name-label" class="tb-logo" style="color:#fff;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+  <div class="tb-div"></div>
   <button class="btn" onclick="undo()" id="btn-undo" title="Undo">⤺ Undo</button>
   <button class="btn" onclick="redo()" id="btn-redo" title="Redo">⤼ Redo</button>
   <div class="tb-div"></div>
@@ -1218,7 +1221,7 @@ function initMyUser(name) {
 }
 
 function getRoomId() {
-  return 'main';
+  return new URLSearchParams(location.search).get('p') || '';
 }
 
 // ── Name prompt ──────────────────────────────────────────
@@ -1315,6 +1318,7 @@ function broadcastState() {
   clearTimeout(_broadcastTimer);
   _broadcastTimer = setTimeout(() => {
     _db.ref('rooms/' + roomId + '/state').set(serializeState()).catch(() => {});
+    _db.ref('projects/' + roomId + '/lastModified').set(Date.now()).catch(() => {});
   }, 150);
 }
 
@@ -1356,6 +1360,15 @@ function startFirebase() {
   try { firebase.app(); } catch { firebase.initializeApp(FIREBASE_CONFIG); }
   _db = firebase.database();
   roomId = getRoomId();
+
+  // Load project name into toolbar
+  _db.ref('projects/' + roomId + '/name').once('value', snap => {
+    const name = snap.val();
+    if (name) {
+      document.getElementById('project-name-label').textContent = name;
+      document.title = name + ' — Roadmap Pro';
+    }
+  });
 
   const myPresRef = _db.ref('rooms/' + roomId + '/presence/' + myUser.id);
   myPresRef.set({ name: myUser.name, color: myUser.color });
@@ -1421,8 +1434,13 @@ resize();
   saveState(); draw();
 })();
 
-// Boot: show name prompt, or skip if name already stored
+// Boot: redirect to projects if no project ID, else start session
 (function boot() {
+  const projectId = new URLSearchParams(location.search).get('p');
+  if (!projectId) {
+    window.location.href = 'index.html';
+    return;
+  }
   const stored = getStoredUser();
   if (stored && stored.name) {
     initMyUser(stored.name);

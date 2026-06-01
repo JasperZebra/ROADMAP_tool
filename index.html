@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Roadmap Pro — Projects</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',system-ui,sans-serif;color:#dbdee1;}
+
+.header{
+  position:sticky;top:0;z-index:100;
+  background:#111214;border-bottom:1px solid #111;
+  padding:0 32px;height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.logo{font-size:18px;font-weight:700;color:#ddd;}
+.logo em{color:#7289da;font-style:normal;font-weight:400;}
+.header-right{display:flex;align-items:center;gap:10px;}
+.user-chip{font-size:12px;color:#72767d;font-weight:600;}
+
+.btn{
+  height:34px;padding:0 14px;border-radius:5px;
+  border:1px solid #3a3a3a;background:#2b2d31;
+  color:#dbdee1;font-size:12px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;
+  transition:all .15s;text-decoration:none;
+}
+.btn:hover{background:#3a3c42;color:#fff;}
+.btn.blue{background:#4752c4;border-color:#4752c4;color:#fff;}
+.btn.blue:hover{background:#5865f2;}
+.btn.red{background:#c0392b;border-color:#c0392b;color:#fff;}
+.btn.red:hover{background:#e74c3c;}
+
+.main{padding:36px 32px;max-width:1200px;margin:0 auto;}
+.section-title{
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  color:#5c6068;letter-spacing:.8px;margin-bottom:20px;
+}
+
+.projects-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+  gap:16px;
+}
+
+.project-card{
+  background:#2b2d31;border:1px solid #1e1f22;border-radius:10px;
+  padding:20px;cursor:pointer;position:relative;
+  transition:all .15s;display:flex;flex-direction:column;gap:12px;
+  min-height:150px;
+}
+.project-card:hover{
+  background:#313338;border-color:#4752c4;
+  transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.35);
+}
+.project-card-accent{height:4px;border-radius:2px;width:44px;}
+.project-card-name{font-size:15px;font-weight:700;color:#fff;line-height:1.4;word-break:break-word;}
+.project-card-by{font-size:11px;color:#5c6068;}
+.project-card-meta{font-size:11px;color:#72767d;margin-top:auto;}
+.project-card-delete{
+  position:absolute;top:10px;right:10px;
+  width:26px;height:26px;border-radius:5px;
+  border:none;background:transparent;color:#5c6068;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:13px;transition:all .15s;opacity:0;
+}
+.project-card:hover .project-card-delete{opacity:1;}
+.project-card-delete:hover{background:#c0392b;color:#fff;}
+
+.new-card{
+  border:2px dashed #3a3c42;background:transparent;
+  align-items:center;justify-content:center;
+  color:#5c6068;font-size:13px;font-weight:600;gap:8px;
+  flex-direction:column;
+}
+.new-card:hover{
+  border-color:#4752c4;color:#7289da;
+  background:rgba(71,82,196,0.06);transform:translateY(-2px);
+}
+.new-card-icon{font-size:28px;line-height:1;}
+
+.empty-state{
+  grid-column:1/-1;text-align:center;padding:80px 20px;color:#5c6068;
+}
+.empty-state h3{font-size:18px;margin-bottom:8px;color:#72767d;}
+.empty-state p{font-size:13px;line-height:1.6;}
+
+/* Modals */
+.modal-overlay{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,0.75);z-index:500;
+  display:none;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.show{display:flex;}
+.modal{
+  background:#2b2d31;border-radius:12px;padding:28px;
+  width:340px;display:flex;flex-direction:column;gap:16px;
+  box-shadow:0 16px 48px rgba(0,0,0,0.5);border:1px solid #3a3c42;
+}
+.modal h3{color:#fff;font-size:17px;font-weight:700;}
+.modal p{color:#949ba4;font-size:13px;line-height:1.6;}
+.modal input[type="text"]{
+  width:100%;background:#1e1f22;border:1px solid #3a3c42;
+  color:#fff;padding:10px 14px;border-radius:6px;
+  font-size:14px;outline:none;font-family:inherit;
+}
+.modal input[type="text"]:focus{border-color:#7289da;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+
+/* Name overlay */
+#name-overlay{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,0.85);z-index:700;
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.name-modal{
+  background:#2b2d31;border-radius:12px;padding:32px;
+  width:320px;display:flex;flex-direction:column;gap:16px;
+  box-shadow:0 16px 48px rgba(0,0,0,0.6);border:1px solid #3a3c42;
+}
+.name-modal h2{color:#fff;font-size:20px;font-weight:700;}
+.name-modal p{color:#949ba4;font-size:13px;line-height:1.6;}
+.name-modal input{
+  width:100%;background:#1e1f22;border:1px solid #3a3c42;
+  color:#fff;padding:10px 14px;border-radius:6px;
+  font-size:14px;outline:none;font-family:inherit;
+}
+.name-modal input:focus{border-color:#7289da;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="logo">Roadmap <em>Pro</em></span>
+  <div class="header-right">
+    <span class="user-chip" id="user-chip"></span>
+    <button class="btn blue" onclick="showNewProjectModal()">+ New Project</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="section-title">Projects</div>
+  <div class="projects-grid" id="projects-grid">
+    <div style="color:#5c6068;font-size:13px;padding:40px;">Loading...</div>
+  </div>
+</div>
+
+<!-- New Project Modal -->
+<div class="modal-overlay" id="new-project-modal">
+  <div class="modal">
+    <h3>New Project</h3>
+    <input type="text" id="project-name-input" placeholder="e.g. Level Editor, UI Redesign..." maxlength="40" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn" onclick="hideNewProjectModal()">Cancel</button>
+      <button class="btn blue" onclick="createProject()">Create →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal">
+    <h3>Delete Project</h3>
+    <p>Are you sure you want to delete "<span id="delete-name" style="color:#fff;font-weight:600;"></span>"? This cannot be undone and will remove all roadmap data.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideDeleteModal()">Cancel</button>
+      <button class="btn red" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Name overlay -->
+<div id="name-overlay" style="display:none;">
+  <div class="name-modal">
+    <h2>Welcome</h2>
+    <p>Enter a display name so collaborators can see who you are on the canvas.</p>
+    <input type="text" id="name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <button class="btn blue" onclick="confirmName()" style="justify-content:center;height:40px;font-size:13px;font-weight:600;">Continue →</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyDTd8bdNHK6xIG5sd_j2_LZ6uy4aVQGMGw",
+  authDomain:        "roadmap-53f16.firebaseapp.com",
+  databaseURL:       "https://roadmap-53f16-default-rtdb.firebaseio.com",
+  projectId:         "roadmap-53f16",
+  storageBucket:     "roadmap-53f16.firebasestorage.app",
+  messagingSenderId: "708743782367",
+  appId:             "1:708743782367:web:f89c95edaeefdefd326e6a"
+};
+
+const ACCENT_COLORS = ['#4752c4','#48a97a','#5b82f5','#9b6fd6','#e05050','#f5a623','#00bcd4','#e91e63'];
+const COLLAB_COLORS = ['#e05050','#48a97a','#f5a623','#9b6fd6','#00bcd4','#e91e63','#ff9800','#03a9f4'];
+
+let _db = null;
+let myUser = { id:'', name:'', color:'' };
+let _deleteTargetId = null;
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('rm_collab_user') || 'null'); } catch { return null; }
+}
+
+function initMyUser(name) {
+  let stored = getStoredUser() || {
+    id: Math.random().toString(36).slice(2, 12),
+    color: COLLAB_COLORS[Math.floor(Math.random() * COLLAB_COLORS.length)]
+  };
+  stored.name = name || stored.name || 'User';
+  localStorage.setItem('rm_collab_user', JSON.stringify(stored));
+  myUser = stored;
+  document.getElementById('user-chip').textContent = '● ' + myUser.name;
+}
+
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmName();
+});
+
+function confirmName() {
+  const name = document.getElementById('name-input').value.trim() || 'User';
+  initMyUser(name);
+  document.getElementById('name-overlay').style.display = 'none';
+  initFirebase();
+}
+
+function initFirebase() {
+  try { firebase.app(); } catch { firebase.initializeApp(FIREBASE_CONFIG); }
+  _db = firebase.database();
+  _db.ref('projects').on('value', snap => {
+    renderProjects(snap.val() || {});
+  });
+}
+
+function renderProjects(data) {
+  const grid = document.getElementById('projects-grid');
+  const entries = Object.entries(data).sort((a, b) => (b[1].lastModified || 0) - (a[1].lastModified || 0));
+
+  grid.innerHTML = '';
+
+  entries.forEach(([id, proj]) => {
+    const color = proj.color || ACCENT_COLORS[0];
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.onclick = (e) => { if (!e.target.classList.contains('project-card-delete')) openProject(id); };
+    card.innerHTML = `
+      <div class="project-card-accent" style="background:${color}"></div>
+      <div class="project-card-name">${esc(proj.name)}</div>
+      <div class="project-card-by">by ${esc(proj.createdBy || 'Unknown')}</div>
+      <div class="project-card-meta">Last edited ${timeAgo(proj.lastModified)}</div>
+      <button class="project-card-delete" onclick="showDeleteModal('${id}','${esc(proj.name)}')" title="Delete project">✕</button>
+    `;
+    grid.appendChild(card);
+  });
+
+  if (entries.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <h3>No projects yet</h3>
+        <p>Click "+ New Project" to create your first roadmap.</p>
+      </div>`;
+  }
+}
+
+function showNewProjectModal() {
+  document.getElementById('project-name-input').value = '';
+  document.getElementById('new-project-modal').classList.add('show');
+  setTimeout(() => document.getElementById('project-name-input').focus(), 50);
+}
+function hideNewProjectModal() {
+  document.getElementById('new-project-modal').classList.remove('show');
+}
+document.getElementById('project-name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') createProject();
+  if (e.key === 'Escape') hideNewProjectModal();
+});
+
+function createProject() {
+  const name = document.getElementById('project-name-input').value.trim();
+  if (!name) { document.getElementById('project-name-input').focus(); return; }
+
+  const id    = Math.random().toString(36).slice(2, 10);
+  const color = ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)];
+  const now   = Date.now();
+
+  _db.ref('projects/' + id).set({ name, color, created: now, lastModified: now, createdBy: myUser.name })
+    .then(() => { hideNewProjectModal(); openProject(id); });
+}
+
+function openProject(id) {
+  window.location.href = 'new_version.html?p=' + id;
+}
+
+function showDeleteModal(id, name) {
+  _deleteTargetId = id;
+  document.getElementById('delete-name').textContent = name;
+  document.getElementById('delete-modal').classList.add('show');
+}
+function hideDeleteModal() {
+  _deleteTargetId = null;
+  document.getElementById('delete-modal').classList.remove('show');
+}
+function confirmDelete() {
+  if (!_deleteTargetId) return;
+  Promise.all([
+    _db.ref('projects/' + _deleteTargetId).remove(),
+    _db.ref('rooms/' + _deleteTargetId).remove()
+  ]).then(hideDeleteModal);
+}
+
+function timeAgo(ts) {
+  if (!ts) return 'never';
+  const d = Date.now() - ts;
+  const m = Math.floor(d / 60000), h = Math.floor(d / 3600000), dy = Math.floor(d / 86400000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return m + 'm ago';
+  if (h < 24) return h + 'h ago';
+  if (dy < 30) return dy + 'd ago';
+  return new Date(ts).toLocaleDateString();
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+(function boot() {
+  const stored = getStoredUser();
+  if (stored && stored.name) {
+    initMyUser(stored.name);
+    initFirebase();
+  } else {
+    document.getElementById('name-overlay').style.display = 'flex';
+  }
+})();
+</script>
+</body>
+</html>
