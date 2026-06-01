@@ -469,6 +469,26 @@ function rr(c, x, y, w, h, r) {
   c.arcTo(x, y, x + w, y, r); c.closePath();
 }
 
+function wrapText(c, text, x, y, maxWidth, lineHeight, maxLines) {
+  const words = text.split(' ');
+  let line = '', ty = y, count = 0;
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (c.measureText(test).width > maxWidth && line) {
+      c.fillText(line, x, ty);
+      line = word; ty += lineHeight; count++;
+      if (maxLines && count >= maxLines - 1) {
+        const remaining = words.slice(words.indexOf(word) + 1).join(' ');
+        let last = word + (remaining ? ' ' + remaining : '');
+        while (c.measureText(last + '…').width > maxWidth && last.length > 1) last = last.slice(0, -1);
+        c.fillText(last + (remaining ? '…' : ''), x, ty);
+        return;
+      }
+    } else { line = test; }
+  }
+  if (line) c.fillText(line, x, ty);
+}
+
 function setTool(t) {
   tool = t;
   document.getElementById('tool-select').classList.remove('active');
@@ -713,28 +733,44 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     c.drawImage(img, dx, dy, dw, dh);
     c.restore();
   } else {
-    c.fillStyle = '#f0f1f3';
+    // No image — draw description text inside the placeholder area with wrapping
+    c.fillStyle = '#2a2b2f';
     rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.fill();
+
+    c.save();
+    rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.clip();
+    const innerPad = 7 * scale;
+    const fontSize = 10 * scale;
+    const lineH = fontSize * 1.55;
+    const maxW = nw - pad * 2 - innerPad * 2;
+    const maxLines = Math.floor(imgAreaH / lineH);
+    c.fillStyle = n.desc ? '#b0b5bd' : '#5c6068';
+    c.font = `500 ${fontSize}px system-ui`;
+    c.textBaseline = 'top';
+    wrapText(c, n.desc || 'Double-click to edit...', s.x + pad + innerPad, imgAreaY + innerPad, maxW, lineH, maxLines);
+    c.restore();
   }
 
   // Modular Checklist Task String Sub-render
   if (n.tasks && n.tasks.length > 0) {
     const total = n.tasks.length;
     const resolved = n.tasks.filter(t => t.done).length;
-    
+
     c.fillStyle = '#4752c4';
     c.font = `700 ${10 * scale}px system-ui`;
     c.fillText(`📋 ${resolved}/${total} Tasks`, s.x + pad, s.y + nh - 30 * scale);
-    
+
     // Dynamic Micro Progress Fill Meter
     c.fillStyle = '#e3e5e8';
     rr(c, s.x + pad, s.y + nh - 20 * scale, nw - pad * 2, 3 * scale, 1.5 * scale); c.fill();
     c.fillStyle = resolved === total ? '#2e7d32' : '#4752c4';
     rr(c, s.x + pad, s.y + nh - 20 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
-  } else {
-    // Standard Text Context Fallback
-    c.fillStyle = '#666'; c.font = `500 ${11 * scale}px system-ui`;
-    c.fillText(n.desc || 'Double-click to edit...', s.x + pad, s.y + nh - 24 * scale);
+  } else if (n.img) {
+    // Image is shown above — show description as wrapped text at bottom
+    c.save();
+    c.fillStyle = '#949ba4'; c.font = `500 ${10 * scale}px system-ui`; c.textBaseline = 'top';
+    wrapText(c, n.desc || '', s.x + pad, s.y + nh - 32 * scale, nw - pad * 2, 12 * scale, 2);
+    c.restore();
   }
   c.restore();
 
