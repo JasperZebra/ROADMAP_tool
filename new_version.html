@@ -1218,9 +1218,7 @@ function initMyUser(name) {
 }
 
 function getRoomId() {
-  let hash = location.hash.replace(/^#/, '');
-  if (!hash) { hash = Math.random().toString(36).slice(2, 8); location.hash = hash; }
-  return hash;
+  return 'main';
 }
 
 // ── Name prompt ──────────────────────────────────────────
