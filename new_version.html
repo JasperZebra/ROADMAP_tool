@@ -811,7 +811,7 @@ window.addEventListener('mousemove', e => {
   
   if (_drawing && _curStroke) {
     _curStroke.points.push(sw(p.x, p.y));
-    draw(); return;
+    broadcastStateLive(); draw(); return;
   }
   
   if (_tempLink) {
@@ -842,7 +842,7 @@ window.addEventListener('mousemove', e => {
       _activeImg.x = cx - _activeImg.w / 2;
       _activeImg.y = cy - _activeImg.h / 2;
     }
-    draw(); return;
+    broadcastStateLive(); draw(); return;
   }
   
   if (_selBoxStart) {
@@ -860,7 +860,7 @@ window.addEventListener('mousemove', e => {
       item.node.x = w.x + item.offX;
       item.node.y = w.y + item.offY;
     });
-    draw();
+    broadcastStateLive(); draw();
   }
 });
 
@@ -1308,6 +1308,18 @@ function broadcastState() {
       .set({ nodes, links, strokes, canvasImages, _id })
       .catch(() => {});
   }, 150);
+}
+
+// ── Live broadcast during drag/draw (throttled 50 ms) ────
+let _liveBroadcastMs = 0;
+function broadcastStateLive() {
+  if (!_db) return;
+  const now = Date.now();
+  if (now - _liveBroadcastMs < 50) return;
+  _liveBroadcastMs = now;
+  _db.ref('rooms/' + roomId + '/state')
+    .set({ nodes, links, strokes, canvasImages, _id })
+    .catch(() => {});
 }
 
 // ── Cursor broadcast (throttled ~30 fps) ─────────────────
