@@ -618,16 +618,18 @@ function toggleComplete(id, currently) {
 }
 
 function fireConfetti() {
+  const colors = ['#f5a623','#4752c4','#48a97a','#e05050','#9b6fd6','#fff','#ffd700'];
   const burst = (x, angle) => confetti({
-    particleCount: 80,
+    particleCount: 120,
     angle,
-    spread: 60,
-    origin: { x, y: 0.55 },
-    colors: ['#f5a623','#4752c4','#48a97a','#e05050','#9b6fd6','#fff','#ffd700']
+    spread: 70,
+    origin: { x, y: 0.65 },
+    scalar: 1.6,
+    colors
   });
-  burst(0.2, 60);
-  burst(0.8, 120);
-  setTimeout(() => burst(0.5, 90), 200);
+  burst(0,   65);   // hard left edge, shooting right+up
+  burst(1,  115);   // hard right edge, shooting left+up
+  setTimeout(() => burst(0.5, 90), 250); // center, shooting straight up
 }
 function toggleArchive(id, currently) {
   _db.ref('projects/' + id + '/archived').set(!currently).catch(() => {});
