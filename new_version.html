@@ -211,11 +211,24 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 [data-theme="light"] .brush-label{color:#5c6068;}
 [data-theme="light"] .swatch:hover,[data-theme="light"] .swatch.active{border-color:#1a1b1e;}
 [data-theme="light"] .cw{background:#dde1e7;}
-[data-theme="light"] .modal{background:#ffffff;border-color:#d5d8dc;color:#1a1b1e;}
-[data-theme="light"] .modal h3{color:#1a1b1e;}
-[data-theme="light"] .modal label{color:#5c6068;}
-[data-theme="light"] .modal input[type="text"],[data-theme="light"] .modal textarea{background:#f2f3f5;border-color:#d5d8dc;color:#1a1b1e;}
-[data-theme="light"] .modal-tasks-container{background:#f2f3f5;border-color:#d5d8dc;}
+/* ── Color Shelf (always dark — used in modal too) ────────── */
+.color-shelf-pop{display:none;position:fixed;z-index:600;background:#1a1b1e;border:1px solid #333;border-radius:8px;padding:10px;width:208px;box-shadow:0 8px 24px rgba(0,0,0,0.5);flex-direction:column;gap:8px;}
+.color-shelf-pop.open{display:flex;}
+.color-shelf-panel{display:none;background:#1a1b1e;border:1px solid #2a2b2e;border-radius:6px;padding:8px;flex-direction:column;gap:8px;}
+.color-shelf-panel.open{display:flex;}
+.cs-header{display:flex;align-items:center;justify-content:space-between;}
+.cs-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.6px;}
+.cs-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-height:104px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent;}
+.cs-swatch{width:100%;aspect-ratio:1;border-radius:4px;cursor:pointer;border:2px solid transparent;position:relative;transition:transform .1s,border-color .12s;}
+.cs-swatch:hover{transform:scale(1.15);border-color:rgba(255,255,255,0.35);}
+.cs-swatch.active-swatch{border-color:#fff !important;transform:scale(1.1);}
+.cs-swatch::after{content:'×';position:absolute;top:-5px;right:-5px;width:13px;height:13px;background:#e05050;color:#fff;border-radius:50%;font-size:10px;line-height:13px;text-align:center;display:none;font-weight:700;}
+.cs-swatch:hover::after{display:block;}
+.cs-add-row{display:flex;gap:6px;align-items:center;}
+.cs-add-row input[type="color"]{width:28px;height:28px;border:none;border-radius:4px;cursor:pointer;background:transparent;padding:0;flex-shrink:0;}
+.cs-add-btn{flex:1;height:26px;border-radius:4px;border:1px dashed #444;background:transparent;color:#aaa;font-size:11px;cursor:pointer;transition:all .12s;}
+.cs-add-btn:hover{border-color:#aaa;color:#fff;background:#2a2b2e;}
+.cs-empty{font-size:11px;color:#555;text-align:center;padding:6px 0;}
 [data-theme="light"] .name-modal{background:#ffffff;border-color:#d5d8dc;}
 [data-theme="light"] .name-modal h2{color:#1a1b1e;}
 [data-theme="light"] .name-modal p{color:#5c6068;}
@@ -280,20 +293,12 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   <button class="btn" id="tool-erase" onclick="setTool('erase')">🧽 Erase</button>
 
   <div class="brush-ui" id="brush-ui">
-    <div class="swatch-row">
-      <div class="swatch active" data-color="#ffffff" style="background:#ffffff" title="White" onclick="setBrushColor('#ffffff')"></div>
-      <div class="swatch" data-color="#adb5bd" style="background:#adb5bd" title="Gray" onclick="setBrushColor('#adb5bd')"></div>
-      <div class="swatch" data-color="#e74c3c" style="background:#e74c3c" title="Red" onclick="setBrushColor('#e74c3c')"></div>
-      <div class="swatch" data-color="#e67e22" style="background:#e67e22" title="Orange" onclick="setBrushColor('#e67e22')"></div>
-      <div class="swatch" data-color="#f1c40f" style="background:#f1c40f" title="Yellow" onclick="setBrushColor('#f1c40f')"></div>
-      <div class="swatch" data-color="#2ecc71" style="background:#2ecc71" title="Green" onclick="setBrushColor('#2ecc71')"></div>
-      <div class="swatch" data-color="#3498db" style="background:#3498db" title="Blue" onclick="setBrushColor('#3498db')"></div>
-      <div class="swatch" data-color="#9b59b6" style="background:#9b59b6" title="Purple" onclick="setBrushColor('#9b59b6')"></div>
-    </div>
-    <input type="color" id="brush-color" value="#ffffff" title="Custom Color" oninput="syncSwatchFromPicker()">
+    <input type="color" id="brush-color" value="#ffffff" title="Brush Color" oninput="syncShelfHighlight('brush')">
     <span class="brush-label">Size:</span>
     <input type="range" id="brush-size" min="1" max="20" value="4" title="Brush Size">
+    <button class="btn" id="btn-brush-palette" onclick="toggleBrushShelf(event)" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
   </div>
+  <div class="color-shelf-pop" id="brush-shelf"></div>
 
   <div class="erase-ui" id="erase-ui">
     <span class="brush-label">Eraser:</span>
@@ -350,9 +355,13 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
       </div>
       <div style="display:flex; flex-direction:column; gap:4px;">
         <label>Color</label>
-        <input type="color" id="edit-color">
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="color" id="edit-color" oninput="syncShelfHighlight('modal')" style="width:32px;height:32px;border:none;border-radius:4px;cursor:pointer;background:transparent;">
+          <button class="btn" id="btn-modal-palette" onclick="toggleModalShelf()" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
+        </div>
       </div>
     </div>
+    <div class="color-shelf-panel" id="modal-shelf"></div>
 
     <div style="display:flex; align-items:center; gap:8px; margin: 2px 0;">
       <input type="checkbox" id="edit-complete" style="cursor:pointer; width:16px; height:16px;">
@@ -428,7 +437,7 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 // ═══════════════════════════════════════════════════════════
 // CONSTANTS & STATE
 // ═══════════════════════════════════════════════════════════
-const NW = 200, NH = 175;
+const NW = 200; // node width; height is now dynamic via updateNodeText
 const SCMIN = 0.05, SCMAX = 100;
 const COLORS = ['#4752c4', '#48a97a', '#5b82f5', '#9b6fd6', '#e05050', '#6b7280'];
 
@@ -436,6 +445,7 @@ let nodes = [];
 let links = [];
 let strokes = [];
 let canvasImages = [];
+let favoriteColors = ['#4752c4','#48a97a','#e05050','#e8a838','#9b6fd6','#5b82f5','#6b7280','#ffffff'];
 let _id = 1;
 
 let tool = 'select'; // 'select', 'link', 'draw', 'erase'
@@ -444,13 +454,58 @@ let px = 120, py = 80, sc = 1;
 const imgCache = {};
 
 // ═══════════════════════════════════════════════════════════
+// TEXT WRAPPING & DYNAMIC SIZING
+// ═══════════════════════════════════════════════════════════
+function wrapLines(c, text, maxW) {
+  if (!text) return [];
+  const out = [];
+  for (const para of text.split('\n')) {
+    if (!para) { out.push(''); continue; }
+    let cur = '';
+    for (const word of para.split(/\s+/)) {
+      if (!word) continue;
+      const test = cur ? cur + ' ' + word : word;
+      if (c.measureText(test).width <= maxW) { cur = test; }
+      else {
+        if (cur) out.push(cur);
+        if (c.measureText(word).width <= maxW) { cur = word; }
+        else { let tmp = ''; for (const ch of word) { if (c.measureText(tmp+ch).width<=maxW) tmp+=ch; else { out.push(tmp); tmp=ch; } } cur=tmp; }
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
+function updateNodeText(n) {
+  const pad = 10, maxW = NW - pad * 2;
+  ctx.font = `700 9px system-ui`;
+  n.catLines  = wrapLines(ctx, n.cat  || 'CATEGORY', maxW - 8);
+  ctx.font = `800 14px system-ui`;
+  n.titleLines = wrapLines(ctx, n.name || 'Untitled', maxW);
+  ctx.font = `500 10px system-ui`;
+  n.descLines  = wrapLines(ctx, n.desc || 'Double-click to edit...', maxW - 10);
+  n.descScroll = n.descScroll || 0;
+
+  let cy = 8;
+  n.catY = cy; n.catH = 14; cy += n.catH + 5;
+  n.titleY = cy; n.titleH = n.titleLines.length * (14 * 1.45); cy += n.titleH + 6;
+  if (n.img) { n.imgY = cy; n.imgH = 68; cy += n.imgH + 6; }
+  else { n.imgY = -1; n.imgH = 0; }
+  n.contentY = cy;
+  n.contentH = (n.tasks && n.tasks.length > 0) ? 36 : 46;
+  cy += n.contentH + 8;
+  n.h = cy;
+}
+
+// ═══════════════════════════════════════════════════════════
 // HISTORY (UNDO / REDO)
 // ═══════════════════════════════════════════════════════════
 let historyStack = [];
 let historyIdx = -1;
 
 function saveState() {
-  const state = JSON.stringify({ nodes, links, strokes, canvasImages, _id });
+  const state = JSON.stringify({ nodes, links, strokes, canvasImages, _id, favoriteColors });
   if (historyIdx < historyStack.length - 1) {
     historyStack = historyStack.slice(0, historyIdx + 1);
   }
@@ -468,8 +523,10 @@ function loadState(stateStr) {
   canvasImages = d.canvasImages || [];
   _id = d._id || 1;
   
-  nodes.forEach(n => { if (n.img && !imgCache[n.img]) cacheImage(n.img); });
+  if (d.favoriteColors && d.favoriteColors.length) favoriteColors = d.favoriteColors;
+  nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
   canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
+  renderFavColors();
   draw(); updateHistoryButtons();
 }
 
@@ -572,14 +629,100 @@ function setTool(t) {
 }
 setTool('select');
 
-function setBrushColor(hex) {
-  document.getElementById('brush-color').value = hex;
-  document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.color === hex));
+// ═══════════════════════════════════════════════════════════
+// COLOR SHELF SYSTEM
+// ═══════════════════════════════════════════════════════════
+let _brushShelfOpen = false, _modalShelfOpen = false;
+
+function buildShelf(containerId, mode) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  const header = document.createElement('div'); header.className = 'cs-header';
+  const lbl = document.createElement('span'); lbl.className = 'cs-label'; lbl.textContent = 'Favorite Colors';
+  header.appendChild(lbl); container.appendChild(header);
+  const grid = document.createElement('div'); grid.className = 'cs-grid';
+  if (favoriteColors.length === 0) {
+    const emp = document.createElement('div'); emp.className = 'cs-empty'; emp.style.gridColumn = '1/-1'; emp.textContent = 'No saved colors yet.'; grid.appendChild(emp);
+  } else {
+    const cur = (mode === 'brush' ? document.getElementById('brush-color').value : document.getElementById('edit-color').value).toLowerCase();
+    favoriteColors.forEach((col, idx) => {
+      const sw = document.createElement('div'); sw.className = 'cs-swatch'; sw.style.background = col; sw.title = col;
+      if (hexFromRgb(col).toLowerCase() === cur) sw.classList.add('active-swatch');
+      sw.onclick = ev => {
+        const rect = sw.getBoundingClientRect();
+        if (ev.clientX > rect.right - 14 && ev.clientY < rect.top + 14) { removeFavColor(idx, mode); return; }
+        if (mode === 'brush') { document.getElementById('brush-color').value = col; syncShelfHighlight('brush'); }
+        else { document.getElementById('edit-color').value = col; syncShelfHighlight('modal'); }
+        buildShelf(containerId, mode);
+      };
+      grid.appendChild(sw);
+    });
+  }
+  container.appendChild(grid);
+  const addRow = document.createElement('div'); addRow.className = 'cs-add-row';
+  const picker = document.createElement('input'); picker.type = 'color'; picker.id = containerId + '-add-picker';
+  picker.value = mode === 'brush' ? document.getElementById('brush-color').value : document.getElementById('edit-color').value;
+  picker.title = 'Pick a color to add'; addRow.appendChild(picker);
+  const addBtn = document.createElement('button'); addBtn.className = 'cs-add-btn'; addBtn.textContent = '+ Add to favorites';
+  addBtn.onclick = () => {
+    const col = picker.value;
+    if (!favoriteColors.some(c => c.toLowerCase() === col.toLowerCase())) { favoriteColors.push(col); saveState(); }
+    buildShelf(containerId, mode);
+  };
+  addRow.appendChild(addBtn); container.appendChild(addRow);
 }
-function syncSwatchFromPicker() {
-  const hex = document.getElementById('brush-color').value.toLowerCase();
-  document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.color === hex));
+
+function toggleBrushShelf(e) {
+  e.stopPropagation(); _brushShelfOpen = !_brushShelfOpen;
+  const shelf = document.getElementById('brush-shelf'), btn = document.getElementById('btn-brush-palette');
+  shelf.classList.toggle('open', _brushShelfOpen); btn.classList.toggle('active', _brushShelfOpen);
+  if (_brushShelfOpen) {
+    const r = btn.getBoundingClientRect();
+    shelf.style.top = (r.bottom + 6) + 'px'; shelf.style.left = Math.min(r.left, window.innerWidth - 220) + 'px';
+    buildShelf('brush-shelf', 'brush');
+  }
 }
+
+function toggleModalShelf() {
+  _modalShelfOpen = !_modalShelfOpen;
+  const shelf = document.getElementById('modal-shelf'), btn = document.getElementById('btn-modal-palette');
+  shelf.classList.toggle('open', _modalShelfOpen); btn.classList.toggle('active', _modalShelfOpen);
+  if (_modalShelfOpen) buildShelf('modal-shelf', 'modal');
+}
+
+function syncShelfHighlight(mode) {
+  const shelfId = mode === 'brush' ? 'brush-shelf' : 'modal-shelf';
+  const cur = (mode === 'brush' ? document.getElementById('brush-color').value : document.getElementById('edit-color').value).toLowerCase();
+  document.querySelectorAll('#' + shelfId + ' .cs-swatch').forEach(sw => {
+    sw.classList.toggle('active-swatch', hexFromRgb(sw.style.background || '').toLowerCase() === cur);
+  });
+}
+
+function hexFromRgb(str) {
+  const m = str.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+  if (!m) return str;
+  return '#' + [m[1],m[2],m[3]].map(v => parseInt(v).toString(16).padStart(2,'0')).join('');
+}
+
+function removeFavColor(idx, mode) {
+  favoriteColors.splice(idx, 1); saveState();
+  buildShelf(mode === 'brush' ? 'brush-shelf' : 'modal-shelf', mode);
+}
+
+function renderFavColors() {
+  if (_brushShelfOpen) buildShelf('brush-shelf', 'brush');
+  if (_modalShelfOpen) buildShelf('modal-shelf', 'modal');
+}
+
+document.addEventListener('click', ev => {
+  if (_brushShelfOpen) {
+    const shelf = document.getElementById('brush-shelf'), btn = document.getElementById('btn-brush-palette');
+    if (shelf && !shelf.contains(ev.target) && ev.target !== btn) {
+      _brushShelfOpen = false; shelf.classList.remove('open'); btn.classList.remove('active');
+    }
+  }
+});
 
 // Standalone Image Transforms Tracker
 function getImgHandles(img) {
@@ -754,6 +897,7 @@ function bezConn(c, ax, ay, bx, by, dashed, scale) {
 }
 
 function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
+  if (!n.titleLines) updateNodeText(n);
   const s = wsFunc(n.x, n.y);
   const nw = n.w * scale, nh = n.h * scale;
   const sel = n.selected && !isExport;
@@ -766,128 +910,112 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     c.restore();
   }
 
-  // Base Node Card
+  // Base card
   c.save();
   c.shadowBlur = 8 * scale; c.shadowColor = 'rgba(0,0,0,0.1)'; c.shadowOffsetY = 2 * scale;
   c.fillStyle = '#ffffff';
   rr(c, s.x, s.y, nw, nh, 6 * scale); c.fill();
   c.strokeStyle = 'rgba(0,0,0,0.05)'; c.lineWidth = 1; c.stroke();
-  
-  // Category Accent Pill Header
-  const pad = 10 * scale, pillY = s.y + 8 * scale, pillH = 14 * scale;
+  c.shadowBlur = 0; c.shadowOffsetY = 0;
+
+  const pad = 10 * scale;
+
+  // Category pill
+  const pillY = s.y + n.catY * scale, pillH = n.catH * scale;
   c.fillStyle = n.color || COLORS[0];
   rr(c, s.x + pad, pillY, nw - pad * 2, pillH, 3 * scale); c.fill();
-
-  // Clip pill text so long labels never overflow the pill
   c.save();
   rr(c, s.x + pad, pillY, nw - pad * 2, pillH, 3 * scale); c.clip();
-  c.fillStyle = '#fff';
-  c.font = `700 ${9 * scale}px system-ui`; c.textBaseline = 'middle';
+  c.fillStyle = '#fff'; c.font = `700 ${9 * scale}px system-ui`; c.textBaseline = 'middle';
   c.fillText(n.cat || 'CATEGORY', s.x + pad + 4 * scale, pillY + pillH / 2);
   c.restore();
 
-  // Milestone Title — wrap to 2 lines, clip to node width
-  const titleFontSize = 14 * scale;
-  const titleLineH   = titleFontSize * 1.45;
-  c.font = `800 ${titleFontSize}px system-ui`;
-  const titleWraps = c.measureText(n.name || 'Untitled').width > (nw - pad * 2);
-  const titleBlockH = (titleWraps ? 2 : 1) * titleLineH;
+  // Title
   c.fillStyle = '#111'; c.textBaseline = 'top';
+  c.font = `800 ${14 * scale}px system-ui`;
+  const titleY = s.y + n.titleY * scale, titleLineH = 14 * 1.45 * scale;
   c.save();
   rr(c, s.x, s.y, nw, nh, 6 * scale); c.clip();
-  wrapText(c, n.name || 'Untitled', s.x + pad, pillY + pillH + 5 * scale, nw - pad * 2, titleLineH, 2);
+  (n.titleLines || []).forEach((line, i) => c.fillText(line, s.x + pad, titleY + i * titleLineH));
   c.restore();
 
-  // Attached Inner Image Media Element — starts right after actual title height
-  const imgAreaY = pillY + pillH + 5 * scale + titleBlockH + 4 * scale;
-  const imgAreaH = nh - (imgAreaY - s.y) - 34 * scale; 
-  
-  if (n.img && imgCache[n.img] && imgCache[n.img].complete) {
-    const img = imgCache[n.img];
-    c.save();
-    rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.clip();
-    
-    // Math.min guarantees 'object-fit: contain' behavior
-    // so the image is fully visible without any cropping.
-    const iscale = Math.min((nw - pad*2) / img.width, imgAreaH / img.height);
-    
-    const dw = img.width * iscale, dh = img.height * iscale;
-    const dx = s.x + pad + ((nw - pad*2) - dw)/2;
-    const dy = imgAreaY + (imgAreaH - dh)/2;
-    c.drawImage(img, dx, dy, dw, dh);
-    c.restore();
-  } else {
-    // No image — draw description text inside the placeholder area with wrapping
-    c.fillStyle = tc('#2a2b2f','#f0f2f5');
-    rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.fill();
-
-    c.save();
-    rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.clip();
-    const innerPad = 7 * scale;
-    const fontSize = 10 * scale;
-    const lineH = fontSize * 1.55;
-    const maxW = nw - pad * 2 - innerPad * 2;
-    const maxLines = Math.floor(imgAreaH / lineH);
-    c.fillStyle = n.desc ? tc('#b0b5bd','#5c6068') : tc('#5c6068','#9ba1a9');
-    c.font = `500 ${fontSize}px system-ui`;
-    c.textBaseline = 'top';
-    wrapText(c, n.desc || 'Double-click to edit...', s.x + pad + innerPad, imgAreaY + innerPad, maxW, lineH, maxLines);
-    c.restore();
+  // Image
+  if (n.img && n.imgY >= 0) {
+    const imgY = s.y + n.imgY * scale, imgH = n.imgH * scale;
+    if (imgCache[n.img] && imgCache[n.img].complete) {
+      const img = imgCache[n.img];
+      c.save();
+      rr(c, s.x + pad, imgY, nw - pad * 2, imgH, 4 * scale); c.clip();
+      const iscale = Math.min((nw - pad*2) / img.width, imgH / img.height);
+      const dw = img.width * iscale, dh = img.height * iscale;
+      c.drawImage(img, s.x + pad + ((nw-pad*2)-dw)/2, imgY + (imgH-dh)/2, dw, dh);
+      c.restore();
+    } else {
+      c.fillStyle = tc('#2a2b2f','#f0f2f5');
+      rr(c, s.x + pad, imgY, nw - pad * 2, imgH, 4 * scale); c.fill();
+    }
   }
 
-  // Modular Checklist Task String Sub-render
+  // Content area
+  const contentY = s.y + n.contentY * scale, contentH = n.contentH * scale;
+
   if (n.tasks && n.tasks.length > 0) {
-    const total = n.tasks.length;
-    const resolved = n.tasks.filter(t => t.done).length;
-
-    c.fillStyle = '#4752c4';
-    c.font = `700 ${10 * scale}px system-ui`;
-    c.fillText(`📋 ${resolved}/${total} Tasks`, s.x + pad, s.y + nh - 30 * scale);
-
-    // Dynamic Micro Progress Fill Meter
+    const total = n.tasks.length, resolved = n.tasks.filter(t => t.done).length;
+    c.fillStyle = '#4752c4'; c.font = `700 ${10 * scale}px system-ui`; c.textBaseline = 'top';
+    c.fillText(`📋 ${resolved}/${total} Tasks`, s.x + pad, contentY);
     c.fillStyle = '#e3e5e8';
-    rr(c, s.x + pad, s.y + nh - 20 * scale, nw - pad * 2, 3 * scale, 1.5 * scale); c.fill();
+    rr(c, s.x + pad, contentY + 14 * scale, nw - pad * 2, 3 * scale, 1.5 * scale); c.fill();
     if (resolved > 0) {
       c.fillStyle = resolved === total ? '#2e7d32' : '#4752c4';
-      rr(c, s.x + pad, s.y + nh - 20 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
+      rr(c, s.x + pad, contentY + 14 * scale, (nw - pad * 2) * (resolved / total), 3 * scale, 1.5 * scale); c.fill();
     }
-  } else if (n.img) {
-    // Image is shown above — show description as wrapped text at bottom
+  } else {
+    // Scrollable description area
     c.save();
-    c.fillStyle = tc('#949ba4','#6b7280'); c.font = `500 ${10 * scale}px system-ui`; c.textBaseline = 'top';
-    wrapText(c, n.desc || '', s.x + pad, s.y + nh - 32 * scale, nw - pad * 2, 12 * scale, 2);
+    c.fillStyle = tc('#2a2b2f','#f0f2f5');
+    rr(c, s.x + pad, contentY, nw - pad * 2, contentH, 4 * scale); c.fill();
+    c.beginPath(); c.rect(s.x + pad, contentY, nw - pad * 2, contentH); c.clip();
+    const fz = 10 * scale, lh = fz * 1.55, ip = 5 * scale;
+    c.font = `500 ${fz}px system-ui`; c.textBaseline = 'top';
+    c.fillStyle = n.desc ? tc('#b0b5bd','#5c6068') : tc('#5c6068','#9ba1a9');
+    const maxScroll = Math.max(0, (n.descLines || []).length * 12 - n.contentH);
+    n.descScroll = Math.max(0, Math.min(n.descScroll || 0, maxScroll));
+    const scrollOff = n.descScroll * scale;
+    (n.descLines || []).forEach((line, i) => {
+      const ly = contentY + ip + i * lh - scrollOff;
+      if (ly > contentY - lh && ly < contentY + contentH) c.fillText(line, s.x + pad + ip, ly);
+    });
     c.restore();
+    if (maxScroll > 0) {
+      const sbW = 4 * scale, sbX = s.x + nw - pad - sbW;
+      const totalH = (n.descLines || []).length * lh;
+      const thumbH = Math.max(10 * scale, (contentH / totalH) * contentH);
+      const thumbY = contentY + (n.descScroll / maxScroll) * (contentH - thumbH);
+      c.save(); c.shadowBlur = 0;
+      c.fillStyle = 'rgba(0,0,0,0.12)';
+      rr(c, sbX, contentY, sbW, contentH, 2 * scale); c.fill();
+      c.fillStyle = 'rgba(0,0,0,0.3)';
+      rr(c, sbX, thumbY, sbW, thumbH, 2 * scale); c.fill();
+      c.restore();
+    }
   }
   c.restore();
 
-  // Bottom-Docked Green Completion Tab / Accent Ring Styling
+  // Complete tab
   if (n.complete) {
     c.save();
-    // Accent Core Card Ring
-    c.strokeStyle = '#2e7d32';
-    c.lineWidth = 1.5 * scale;
-    rr(c, s.x, s.y, nw, nh, 6 * scale);
-    c.stroke();
-
-    // Bottom-Docked Tab Elements Block
+    c.strokeStyle = '#2e7d32'; c.lineWidth = 1.5 * scale;
+    rr(c, s.x, s.y, nw, nh, 6 * scale); c.stroke();
     c.fillStyle = '#2e7d32';
-    const tabW = nw - 24 * scale;
-    const tabH = 16 * scale;
-    const tabX = s.x + (nw - tabW) / 2;
-    const tabY = s.y + nh;
-    
+    const tabW = nw - 24 * scale, tabH = 16 * scale;
+    const tabX = s.x + (nw - tabW) / 2, tabY = s.y + nh;
     c.beginPath();
-    c.moveTo(tabX, tabY);
-    c.lineTo(tabX + tabW, tabY);
+    c.moveTo(tabX, tabY); c.lineTo(tabX + tabW, tabY);
     c.arcTo(tabX + tabW, tabY + tabH, tabX, tabY + tabH, 4 * scale);
     c.arcTo(tabX, tabY + tabH, tabX, tabY, 4 * scale);
-    c.closePath();
-    c.fill();
-    
-    c.fillStyle = '#ffffff';
-    c.font = `700 ${10 * scale}px system-ui`;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
+    c.closePath(); c.fill();
+    c.fillStyle = '#ffffff'; c.font = `700 ${8 * scale}px system-ui`;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText('✓ COMPLETE', tabX + tabW / 2, tabY + tabH / 2);
     c.restore();
   }
@@ -1242,6 +1370,8 @@ function startEdit(n) {
   
   modal.classList.add('show');
   document.getElementById('edit-title').focus();
+  syncShelfHighlight('modal');
+  if (_modalShelfOpen) buildShelf('modal-shelf', 'modal');
 }
 
 function addModalTaskRow(text = '', done = false) {
@@ -1290,6 +1420,7 @@ function commitEdit() {
   });
   _et.tasks = compiledTasks;
   
+  updateNodeText(_et);
   closeEdit(); saveState(); draw();
 }
 
@@ -1305,11 +1436,13 @@ document.getElementById('edit-title').addEventListener('keydown', e => {
 function addNode() {
   const vp = sw(W/2, H/2);
   const color = COLORS[nodes.length % COLORS.length];
-  nodes.push({
-    id: _id++, x: vp.x - NW/2, y: vp.y - NH/2, w: NW, h: NH,
+  const newNode = {
+    id: _id++, x: vp.x - NW/2, y: vp.y - 60, w: NW,
     name: 'New Milestone', desc: 'Double click to edit details.', cat: 'TOPIC', color, selected: false,
     complete: false, tasks: []
-  });
+  };
+  updateNodeText(newNode);
+  nodes.push(newNode);
   saveState(); draw();
 }
 
@@ -1337,10 +1470,8 @@ function pasteClipboard() {
   const dy = _mouseWorld.y - cy;
   nodes.forEach(n => n.selected = false);
   _clipboard.forEach(n => {
-    nodes.push(Object.assign({}, n, {
-      id: _id++, x: n.x + dx, y: n.y + dy, selected: true,
-      tasks: (n.tasks || []).map(t => Object.assign({}, t))
-    }));
+    const nn = Object.assign({}, n, { id: _id++, x: n.x + dx, y: n.y + dy, selected: true, tasks: (n.tasks || []).map(t => Object.assign({}, t)) });
+    updateNodeText(nn); nodes.push(nn);
   });
   saveState(); draw();
 }
@@ -1350,10 +1481,8 @@ function dupeSelected() {
   if (!sel.length) return;
   nodes.forEach(n => n.selected = false);
   sel.forEach(n => {
-    nodes.push(Object.assign({}, n, {
-      id: _id++, x: n.x + 20, y: n.y + 20, selected: true,
-      tasks: (n.tasks || []).map(t => Object.assign({}, t))
-    }));
+    const nn = Object.assign({}, n, { id: _id++, x: n.x + 20, y: n.y + 20, selected: true, tasks: (n.tasks || []).map(t => Object.assign({}, t)) });
+    updateNodeText(nn); nodes.push(nn);
   });
   saveState(); draw();
 }
@@ -1407,12 +1536,23 @@ function _wasdLoop() {
 
 cv.addEventListener('wheel', e => {
   if (modal.classList.contains('show')) return;
-  e.preventDefault(); const p = cpos(e);
-  
+  e.preventDefault();
+  const p = cpos(e);
+
+  // Scroll inside node description area instead of zooming
+  const hn = hitNode(p.x, p.y);
+  if (hn && (!hn.tasks || hn.tasks.length === 0) && hn.descLines) {
+    const ns2 = ws(hn.x, hn.y);
+    const cY = ns2.y + hn.contentY * sc, cH = hn.contentH * sc, pd = 10 * sc;
+    if (p.x >= ns2.x + pd && p.x <= ns2.x + hn.w * sc - pd && p.y >= cY && p.y <= cY + cH) {
+      const maxS = Math.max(0, hn.descLines.length * 12 - hn.contentH);
+      if (maxS > 0) { hn.descScroll = Math.max(0, Math.min((hn.descScroll||0) + e.deltaY * 0.05, maxS)); draw(); return; }
+    }
+  }
+
   const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
   let ns = sc * zoomFactor;
   ns = Math.max(SCMIN, Math.min(SCMAX, ns));
-  
   const r = ns / sc; px = p.x - r * (p.x - px); py = p.y - r * (p.y - py); sc = ns;
   draw(); document.getElementById('zl').textContent = Math.round(sc * 100) + '%';
 }, { passive: false });
@@ -1684,7 +1824,8 @@ function serializeState() {
     links,
     strokes,
     canvasImages: canvasImages.map(img => Object.assign({}, img, { selected: false })),
-    _id
+    _id,
+    favoriteColors
   };
 }
 
@@ -1847,9 +1988,11 @@ const NODE_TEMPLATES = {
 function addFromTemplate(key) {
   const t = NODE_TEMPLATES[key]; if (!t) return;
   const vp = sw(W / 2, H / 2);
-  nodes.push({ id:_id++, x:vp.x-NW/2, y:vp.y-NH/2, w:NW, h:NH,
+  const newNode = { id:_id++, x:vp.x-NW/2, y:vp.y-60, w:NW,
     name:t.name, desc:t.desc, cat:t.cat, color:t.color,
-    selected:true, complete:false, tasks:t.tasks.map(tk => Object.assign({},tk)) });
+    selected:true, complete:false, tasks:t.tasks.map(tk => Object.assign({},tk)) };
+  updateNodeText(newNode);
+  nodes.push(newNode);
   saveState(); draw();
 }
 
