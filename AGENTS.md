@@ -280,6 +280,24 @@ Both `sortBy` and `viewMode` are persisted in `localStorage`.
 
 ---
 
+## Projects Hub — Both Views Must Stay in Sync
+
+`index.html` has two render functions: `makeCard(id, proj)` for grid view and `makeListRow(id, proj)` for list view. **Any feature added to one must be added to both.**
+
+They must always show the same data and the same ⋯ dropdown options. Current parity checklist:
+
+| Feature | Grid card | List row |
+|---|---|---|
+| Completed ⭐ star | `card-complete-star` absolute positioned top-right | Inline ⭐ after name |
+| Completed border | `.project-card.completed` gold border | `.list-row.completed` gold border |
+| Archived badge | `archived-badge` span in card-top | `archived-badge` span inline after name |
+| Archived dimming | `.project-card.archived` opacity 0.5 | `.list-row.archived` opacity 0.5 |
+| Last edited by | Shown in `card-meta` | Shown in `list-meta` |
+| Pin button | `card-pin-btn` | Separate icon button in `list-actions` |
+| ⋯ dropdown options | Rename, Duplicate, Mark Complete/Incomplete, Archive/Unarchive, Delete | Same |
+
+> **Rule:** If you add a new visual state or action to `makeCard`, immediately apply the same change to `makeListRow` before pushing.
+
 ## Known Gotchas
 
 ### 1. initDemo nodes are removed
