@@ -5,6 +5,7 @@
 <title>Roadmap Pro — Projects</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',system-ui,sans-serif;color:#dbdee1;}
@@ -613,6 +614,20 @@ function togglePin(id, currentlyPinned) {
 }
 function toggleComplete(id, currently) {
   _db.ref('projects/' + id + '/completed').set(!currently).catch(() => {});
+  if (!currently) fireConfetti();
+}
+
+function fireConfetti() {
+  const burst = (x, angle) => confetti({
+    particleCount: 80,
+    angle,
+    spread: 60,
+    origin: { x, y: 0.55 },
+    colors: ['#f5a623','#4752c4','#48a97a','#e05050','#9b6fd6','#fff','#ffd700']
+  });
+  burst(0.2, 60);
+  burst(0.8, 120);
+  setTimeout(() => burst(0.5, 90), 200);
 }
 function toggleArchive(id, currently) {
   _db.ref('projects/' + id + '/archived').set(!currently).catch(() => {});
