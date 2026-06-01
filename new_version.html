@@ -1387,16 +1387,20 @@ function updatePresenceBar() {
   });
 }
 
-// Strip selection state so it stays local and doesn't bleed to other users
+// Committed save — no sender tag so it always reloads for everyone including yourself
 function serializeState() {
   return {
     nodes: nodes.map(n => Object.assign({}, n, { selected: false })),
     links,
     strokes,
     canvasImages: canvasImages.map(img => Object.assign({}, img, { selected: false })),
-    _id,
-    _sender: myUser.id
+    _id
   };
+}
+
+// Live mid-action save — tagged with sender so the sender's own listener ignores the bounce-back
+function serializeStateLive() {
+  return Object.assign(serializeState(), { _sender: myUser.id });
 }
 
 // ── State broadcast (debounced 150 ms) ───────────────────
@@ -1418,7 +1422,7 @@ function broadcastStateLive() {
   const now = Date.now();
   if (now - _liveBroadcastMs < 50) return;
   _liveBroadcastMs = now;
-  _db.ref('rooms/' + roomId + '/state').set(serializeState()).catch(() => {});
+  _db.ref('rooms/' + roomId + '/state').set(serializeStateLive()).catch(() => {});
 }
 
 
@@ -1468,7 +1472,8 @@ function startFirebase() {
   _db.ref('rooms/' + roomId + '/state').on('value', snap => {
     const data = snap.val();
     if (!data) { broadcastState(); return; }
-    if (data._sender === myUser.id) return;
+    // Skip only live mid-action updates from self (committed saves have no _sender)
+    if (data._sender && data._sender === myUser.id) return;
     nodes        = data.nodes        || [];
     links        = data.links        || [];
     strokes      = data.strokes      || [];
