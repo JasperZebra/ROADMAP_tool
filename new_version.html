@@ -530,7 +530,6 @@ function setTool(t) {
   document.getElementById('erase-ui').classList.toggle('active', t === 'erase');
   // Hide OS cursor when erasing so the preview circle is the cursor
   document.querySelector('canvas').style.cursor = t === 'erase' ? 'none' : '';
-  draw();
 }
 setTool('select');
 
