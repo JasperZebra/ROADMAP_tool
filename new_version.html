@@ -1000,16 +1000,14 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
   c.font = `500 ${10 * scale}px system-ui`;
   const descLines = wrapLines(c, n.desc || 'Double-click to edit...', nw - 2 * pad - 10 * scale);
 
-  // If title line count changed, recompute all dependent layout positions
+  // Always recompute layout from fresh title lines so imgY/contentY/h are never stale
   const tlh = 14 * 1.45;
-  if (titleLines.length !== (n.titleLines || []).length) {
-    n.titleLines = titleLines;
-    n.titleH     = titleLines.length * tlh;
-    if (n.img) n.imgY = (n.titleY || 27) + n.titleH + 6;
-    n.contentY   = (n.titleY || 27) + n.titleH + 6 + (n.imgH > 0 ? n.imgH + 6 : 0);
-    n.h          = n.contentY + (n.contentH || 46) + 8;
-  }
-  n.descLines = descLines;
+  n.titleLines = titleLines;
+  n.titleH     = titleLines.length * tlh;
+  if (n.img) n.imgY = (n.titleY || 27) + n.titleH + 6;
+  n.contentY   = (n.titleY || 27) + n.titleH + 6 + (n.imgH > 0 ? n.imgH + 6 : 0);
+  n.h          = n.contentY + (n.contentH || 46) + 8;
+  n.descLines  = descLines;
 
   let nh = n.h * scale;
   const sel = n.selected && !isExport;
