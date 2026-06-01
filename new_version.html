@@ -188,12 +188,48 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 
 /* Dynamic Task List styling */
 .modal-tasks-container {
-  display: flex; flex-direction: column; gap:6px; max-height: 110px; 
+  display: flex; flex-direction: column; gap:6px; max-height: 110px;
   overflow-y: auto; background: #1e1f22; padding: 6px; border-radius: 4px; border: 1px solid #111;
 }
 .modal-task-row { display: flex; align-items: center; gap: 6px; }
 .modal-task-row input[type="checkbox"] { cursor: pointer; width: 14px; height: 14px; }
 .modal-task-row input[type="text"] { padding: 4px 6px; font-size: 12px; }
+
+/* ── Light Mode ───────────────────────────────────────── */
+[data-theme="light"] body{background:#f2f3f5;color:#1a1b1e;}
+[data-theme="light"] .tb{background:#ffffff;border-bottom-color:#d5d8dc;}
+[data-theme="light"] .tb-logo{color:#1a1b1e;}
+[data-theme="light"] .tb-div{background:#d5d8dc;}
+[data-theme="light"] .btn{background:#f0f2f5;border-color:#d5d8dc;color:#2c2d31;}
+[data-theme="light"] .btn:hover{background:#e3e5e8;color:#000;}
+[data-theme="light"] .btn.active{background:#4752c4;border-color:#4752c4;color:#fff;}
+[data-theme="light"] .btn.blue{background:#4752c4;border-color:#4752c4;color:#fff;}
+[data-theme="light"] .btn.blue:hover{background:#5865f2;}
+[data-theme="light"] .zl{color:#5c6068;}
+[data-theme="light"] .brush-ui,[data-theme="light"] .erase-ui{background:#e8eaed;}
+[data-theme="light"] .brush-label{color:#5c6068;}
+[data-theme="light"] .swatch:hover,[data-theme="light"] .swatch.active{border-color:#1a1b1e;}
+[data-theme="light"] .cw{background:#dde1e7;}
+[data-theme="light"] .modal{background:#ffffff;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .modal h3{color:#1a1b1e;}
+[data-theme="light"] .modal label{color:#5c6068;}
+[data-theme="light"] .modal input[type="text"],[data-theme="light"] .modal textarea{background:#f2f3f5;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .modal-tasks-container{background:#f2f3f5;border-color:#d5d8dc;}
+[data-theme="light"] .name-modal{background:#ffffff;border-color:#d5d8dc;}
+[data-theme="light"] .name-modal h2{color:#1a1b1e;}
+[data-theme="light"] .name-modal p{color:#5c6068;}
+[data-theme="light"] .name-modal input{background:#f2f3f5;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .user-avatar{border-color:#f2f3f5;}
+[data-theme="light"] #ctx-menu,[data-theme="light"] .dropdown-menu,[data-theme="light"] .dd-submenu{background:#ffffff;border-color:#d5d8dc;}
+[data-theme="light"] .dd-item{color:#1a1b1e;}
+[data-theme="light"] .dd-item:hover{background:#f0f2f5;}
+[data-theme="light"] .dd-sep{background:#e3e5e8;}
+[data-theme="light"] .shortcut-modal{background:#ffffff;border-color:#d5d8dc;}
+[data-theme="light"] .shortcut-modal h3{color:#1a1b1e;}
+[data-theme="light"] .shortcut-row{border-bottom-color:#e3e5e8;}
+[data-theme="light"] .shortcut-label{color:#5c6068;}
+[data-theme="light"] .shortcut-key{color:#1a1b1e;background:#f2f3f5;border-color:#d5d8dc;}
+[data-theme="light"] .shortcut-section{color:#8a8f98;}
 </style>
 </head>
 <body>
@@ -264,6 +300,8 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   </div>
 
   <div class="tb-r">
+    <button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" style="font-size:15px;padding:0 8px;">☀️</button>
+    <div class="tb-div"></div>
     <div id="offline-badge">● Offline</div>
     <div class="presence-list" id="presence-list"></div>
     <div class="tb-div"></div>
@@ -779,7 +817,7 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     c.restore();
   } else {
     // No image — draw description text inside the placeholder area with wrapping
-    c.fillStyle = '#2a2b2f';
+    c.fillStyle = tc('#2a2b2f','#f0f2f5');
     rr(c, s.x + pad, imgAreaY, nw - pad * 2, imgAreaH, 4 * scale); c.fill();
 
     c.save();
@@ -789,7 +827,7 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     const lineH = fontSize * 1.55;
     const maxW = nw - pad * 2 - innerPad * 2;
     const maxLines = Math.floor(imgAreaH / lineH);
-    c.fillStyle = n.desc ? '#b0b5bd' : '#5c6068';
+    c.fillStyle = n.desc ? tc('#b0b5bd','#5c6068') : tc('#5c6068','#9ba1a9');
     c.font = `500 ${fontSize}px system-ui`;
     c.textBaseline = 'top';
     wrapText(c, n.desc || 'Double-click to edit...', s.x + pad + innerPad, imgAreaY + innerPad, maxW, lineH, maxLines);
@@ -815,7 +853,7 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
   } else if (n.img) {
     // Image is shown above — show description as wrapped text at bottom
     c.save();
-    c.fillStyle = '#949ba4'; c.font = `500 ${10 * scale}px system-ui`; c.textBaseline = 'top';
+    c.fillStyle = tc('#949ba4','#6b7280'); c.font = `500 ${10 * scale}px system-ui`; c.textBaseline = 'top';
     wrapText(c, n.desc || '', s.x + pad, s.y + nh - 32 * scale, nw - pad * 2, 12 * scale, 2);
     c.restore();
   }
@@ -1817,6 +1855,22 @@ function addFromTemplate(key) {
 // ── Shortcut Overlay ──────────────────────────────────────
 function openShortcuts()  { document.getElementById('shortcut-overlay').classList.add('show'); }
 function closeShortcuts() { document.getElementById('shortcut-overlay').classList.remove('show'); }
+
+// ── Theme ─────────────────────────────────────────────────
+function tc(dark, light) {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? light : dark;
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
+  localStorage.setItem('rm_theme', t);
+  if (W > 0) draw();
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+applyTheme(localStorage.getItem('rm_theme') || 'dark');
 
 // Boot: redirect to projects if no project ID, else start session
 (function boot() {

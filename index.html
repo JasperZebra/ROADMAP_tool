@@ -236,6 +236,51 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 }
 .empty-state h3{font-size:18px;margin-bottom:8px;color:#72767d;}
 .empty-state p{font-size:13px;line-height:1.6;}
+
+/* ── Light Mode ───────────────────────────────────────── */
+[data-theme="light"] body{background:#f2f3f5;color:#1a1b1e;}
+[data-theme="light"] .header{background:#ffffff;border-bottom-color:#d5d8dc;}
+[data-theme="light"] .logo{color:#1a1b1e;}
+[data-theme="light"] .search-wrap input{background:#f0f2f5;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .search-wrap input::placeholder{color:#8a8f98;}
+[data-theme="light"] .user-chip{color:#5c6068;}
+[data-theme="light"] .user-chip:hover{background:#f0f2f5;color:#1a1b1e;}
+[data-theme="light"] .btn{background:#f0f2f5;border-color:#d5d8dc;color:#2c2d31;}
+[data-theme="light"] .btn:hover{background:#e3e5e8;color:#000;}
+[data-theme="light"] .btn.active,[data-theme="light"] .btn.blue{background:#4752c4;border-color:#4752c4;color:#fff;}
+[data-theme="light"] .btn.blue:hover{background:#5865f2;}
+[data-theme="light"] .toolbar{background:#f2f3f5;border-bottom-color:#d5d8dc;}
+[data-theme="light"] .section-title{color:#8a8f98;}
+[data-theme="light"] .sort-select{background:#f0f2f5;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .sort-select:hover{background:#e3e5e8;}
+[data-theme="light"] .project-card{background:#ffffff;border-color:#e0e2e7;}
+[data-theme="light"] .project-card:hover{background:#f8f9fa;box-shadow:0 4px 12px rgba(0,0,0,0.08);}
+[data-theme="light"] .card-name{color:#1a1b1e;}
+[data-theme="light"] .card-nodes,[data-theme="light"] .card-meta{color:#8a8f98;}
+[data-theme="light"] .card-name[contenteditable="true"]{background:#f0f2f5;}
+[data-theme="light"] .card-color-dot{border-color:rgba(0,0,0,0.15);}
+[data-theme="light"] .card-more-btn{color:#8a8f98;}
+[data-theme="light"] .card-more-btn:hover{color:#1a1b1e;}
+[data-theme="light"] .archived-badge{background:#e3e5e8;color:#5c6068;}
+[data-theme="light"] .list-row{background:#ffffff;border-color:#e0e2e7;}
+[data-theme="light"] .list-row:hover{background:#f8f9fa;}
+[data-theme="light"] .list-name{color:#1a1b1e;}
+[data-theme="light"] .list-nodes,[data-theme="light"] .list-meta{color:#8a8f98;}
+[data-theme="light"] .pres-dot{border-color:#ffffff;}
+[data-theme="light"] .dropdown-menu,[data-theme="light"] #proj-ctx-menu{background:#ffffff;border-color:#d5d8dc;}
+[data-theme="light"] .dd-item{color:#1a1b1e;}
+[data-theme="light"] .dd-item:hover{background:#f0f2f5;}
+[data-theme="light"] .dd-sep{background:#e3e5e8;}
+[data-theme="light"] .modal{background:#ffffff;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .modal h3{color:#1a1b1e;}
+[data-theme="light"] .modal p{color:#5c6068;}
+[data-theme="light"] .modal input[type="text"]{background:#f2f3f5;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .name-modal{background:#ffffff;border-color:#d5d8dc;}
+[data-theme="light"] .name-modal h2{color:#1a1b1e;}
+[data-theme="light"] .name-modal p{color:#5c6068;}
+[data-theme="light"] .name-modal input{background:#f2f3f5;border-color:#d5d8dc;color:#1a1b1e;}
+[data-theme="light"] .empty-state{color:#8a8f98;}
+[data-theme="light"] .empty-state h3{color:#5c6068;}
 </style>
 </head>
 <body>
@@ -250,6 +295,7 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
   <div class="header-right">
     <div class="online-dot" id="online-dot" title="Connecting..."></div>
     <span class="user-chip" id="user-chip" onclick="showChangeName()" title="Click to change name"></span>
+    <button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" style="font-size:15px;padding:0 8px;">☀️</button>
     <button class="btn blue" onclick="showNewProjectModal()">+ New Project</button>
   </div>
 </div>
@@ -763,6 +809,18 @@ function closeProjCtxMenu() {
 
 document.addEventListener('click',   () => closeProjCtxMenu());
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProjCtxMenu(); });
+
+// ── Theme ─────────────────────────────────────────────────
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
+  localStorage.setItem('rm_theme', t);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+}
+applyTheme(localStorage.getItem('rm_theme') || 'dark');
 
 // ── Boot ──────────────────────────────────────────────────
 (function boot() {
