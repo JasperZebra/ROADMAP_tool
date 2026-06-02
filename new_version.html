@@ -512,7 +512,7 @@ function wrapLines(c, text, maxW) {
 }
 
 function updateNodeText(n) {
-  const pad = 10, maxW = NW - pad * 2;
+  const w = n.w || NW, pad = 10, maxW = w - pad * 2; // wrap at the node's own width (matches drawNodeOnCtx)
   // Measure at identity transform so DPR/zoom don't skew line widths
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.font = `700 9px system-ui`;
@@ -543,6 +543,9 @@ let historyIdx = -1;
 
 function saveState() {
   const state = JSON.stringify({ nodes, links, strokes, canvasImages, groups, _id, favoriteColors });
+  // Local persistence fallback — survives reloads even when Firebase writes fail
+  // silently (offline / rules / quota), so the roadmap never disappears on revisit.
+  try { localStorage.setItem('rm_state_' + getRoomId(), state); } catch {}
   if (historyIdx < historyStack.length - 1) {
     historyStack = historyStack.slice(0, historyIdx + 1);
   }
@@ -566,6 +569,16 @@ function loadState(stateStr) {
   canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
   renderFavColors();
   scheduleDraw(); updateHistoryButtons();
+}
+
+// Seed canvas from the local persistence fallback (used before Firebase responds
+// and as the recovery path when Firebase has no saved state for this room).
+function loadLocalState() {
+  try {
+    const raw = localStorage.getItem('rm_state_' + getRoomId());
+    if (raw) { loadState(raw); return true; }
+  } catch {}
+  return false;
 }
 
 function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); broadcastState(); } }
@@ -1011,12 +1024,19 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
   const titleLines = n.titleLines;
   const descLines  = n.descLines || [];
 
-  // Layout is cheap math — always recompute from cached line count
+  // Layout is cheap math — recompute authoritatively from the cached line count.
+  // This is the single source of truth for node geometry (updateNodeText is only a
+  // first-pass fallback). imgH/contentH are set here every frame so attaching or
+  // removing an image or tasks can't leave a stale offset that overlaps the text.
   const tlh = 14 * 1.45;
+  n.catY     = 8; n.catH = 14;
+  n.titleY   = n.catY + n.catH + 5;            // 27
   n.titleH   = titleLines.length * tlh;
-  if (n.img) n.imgY = (n.titleY || 27) + n.titleH + 6;
-  n.contentY = (n.titleY || 27) + n.titleH + 6 + (n.imgH > 0 ? n.imgH + 6 : 0);
-  n.h        = n.contentY + (n.contentH || 46) + 8;
+  n.imgH     = n.img ? 68 : 0;
+  n.imgY     = n.img ? n.titleY + n.titleH + 6 : -1;
+  n.contentH = (n.tasks && n.tasks.length > 0) ? 36 : 46;
+  n.contentY = n.titleY + n.titleH + 6 + (n.imgH > 0 ? n.imgH + 6 : 0);
+  n.h        = n.contentY + n.contentH + 8;
 
   let nh = n.h * scale;
   const sel = n.selected && !isExport;
@@ -1782,7 +1802,7 @@ fiImg.addEventListener('change', e => {
   const reader = new FileReader();
   reader.onload = ev => {
     const sel = nodes.find(n => n.selected);
-    if (sel) { sel.img = ev.target.result; cacheImage(sel.img); saveState(); }
+    if (sel) { sel.img = ev.target.result; cacheImage(sel.img); updateNodeText(sel); saveState(); }
   };
   reader.readAsDataURL(file); e.target.value = '';
 });
@@ -1850,7 +1870,7 @@ function exportImage(format) {
   baseCanvas.width = oc.width; baseCanvas.height = oc.height;
   const baseCtx = baseCanvas.getContext('2d');
   
-  baseCtx.fillStyle = '#2c2d31';
+  baseCtx.fillStyle = tc('#2c2d31', '#dde1e7'); // match the active light/dark canvas background
   baseCtx.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
   baseCtx.drawImage(oc, 0, 0);
   
@@ -2022,6 +2042,10 @@ function broadcastState() {
 let _liveBroadcastMs = 0;
 function broadcastStateLive() {
   if (!_db) return;
+  // Live previews only matter when someone else is watching. Skipping this when
+  // solo avoids serializing the whole state (incl. base64 images) ~20x/sec during
+  // draw/drag — the main cause of laggy drawing. mouseup's saveState still persists.
+  if (Object.keys(remoteCursors).length === 0) return;
   const now = Date.now();
   if (now - _liveBroadcastMs < 50) return;
   _liveBroadcastMs = now;
@@ -2050,12 +2074,17 @@ function startFirebase() {
       'background:#e05050;color:#fff;font-weight:bold;',
       '\nFirebase is not configured. Edit FIREBASE_CONFIG in the HTML to enable live collaboration.'
     );
+    loadLocalState(); // offline mode — restore whatever was last saved locally
     return;
   }
 
   try { firebase.app(); } catch { firebase.initializeApp(FIREBASE_CONFIG); }
   _db = firebase.database();
   roomId = getRoomId();
+
+  // Seed from the local fallback immediately so the canvas isn't blank while we
+  // wait for Firebase. Real Firebase state (below) overrides this when it arrives.
+  loadLocalState();
 
   // Load project name into toolbar
   _db.ref('projects/' + roomId + '/name').once('value', snap => {

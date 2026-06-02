@@ -123,6 +123,20 @@ const FIREBASE_CONFIG = {
         wy: number (world y)
 ```
 
+### Local Persistence Fallback (Critical)
+
+Firebase writes use `.catch(() => {})` and fail **silently** (offline, security rules, quota). To prevent the roadmap from disappearing on revisit, `saveState()` also mirrors the full state to `localStorage['rm_state_' + getRoomId()]`.
+
+- `loadLocalState()` seeds the canvas from this key.
+- `startFirebase()` calls `loadLocalState()` immediately (online: as a pre-Firebase seed that real Firebase state overrides; offline: as the only restore path).
+- The state listener's `if (!data) { broadcastState(); … }` branch re-uploads the seeded local state when Firebase has no saved state — this is the recovery path.
+
+Firebase remains the source of truth when it has data (its listener overrides the local seed). localStorage only fills the gap when Firebase is empty/unavailable.
+
+### Live Broadcast Is Skipped When Solo (Performance)
+
+`broadcastStateLive()` early-returns when `Object.keys(remoteCursors).length === 0`. Live previews only matter when a collaborator is watching, and serializing the whole state (including base64 images) ~20×/sec on every draw/drag `mousemove` was the cause of laggy drawing. `saveState()` on `mouseup` still persists committed changes for everyone, so nothing is lost when solo.
+
 ### The `_sender` Pattern (Critical)
 
 This is the mechanism that prevents live drag/draw broadcasts from breaking the local user's active state:
@@ -167,7 +181,14 @@ Called on every `draw()`. Order matters:
 4. Milestone node cards
 5. Remote cursors overlay (called after `renderAll` in `draw()`)
 
-The eraser uses `globalCompositeOperation = 'destination-out'` which punches transparent holes. The export function composites the rendered canvas onto a solid background to prevent transparent holes in exported images.
+The eraser uses `globalCompositeOperation = 'destination-out'` which punches transparent holes. The export function composites the rendered canvas onto a solid background to prevent transparent holes in exported images. **That background is theme-aware** — `exportImage` fills it with `tc('#2c2d31', '#dde1e7')` so exports match the chosen light/dark mode (the on-screen `.cw` canvas backgrounds).
+
+### Node Layout: Single Source of Truth
+
+`drawNodeOnCtx` is the **authoritative** owner of node geometry. Every frame it recomputes `catY`, `titleY`, `titleH`, `imgH`, `imgY`, `contentH`, `contentY`, and `n.h` from the (cached) wrapped line count. `updateNodeText` is only a first-pass fallback (called on load/create/edit) and must use the **same widths and constants** — it wraps at `n.w` (not the `NW` constant) so its line breaks match `drawNodeOnCtx`.
+
+- Wrapping (`titleLines`/`descLines`) is cached per node via `n._textKey` and only recomputed when text changes; layout math runs every frame.
+- `imgH` is set to `n.img ? 68 : 0` **in `drawNodeOnCtx` every frame**, so attaching/removing an image can never leave a stale offset that overlaps the text. Image-attach (`fi-img`) also calls `updateNodeText` so the locally-serialized state is correct before reload.
 
 ### Tool System
 `tool` can be: `'select'`, `'link'`, `'draw'`, `'erase'`
@@ -206,8 +227,8 @@ User drags node
   id:       number,
   x:        number,   // world space top-left
   y:        number,
-  w:        number,   // always NW (160)
-  h:        number,   // always NH (140)
+  w:        number,   // always NW (200)
+  h:        number,   // dynamic — recomputed every frame in drawNodeOnCtx from wrapped line count
   name:     string,
   desc:     string,
   cat:      string,   // category label (uppercase)
