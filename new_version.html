@@ -64,6 +64,7 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   background:#2b2d31; width:380px; border-radius:8px; padding:20px;
   box-shadow:0 8px 24px rgba(0,0,0,0.4); border:1px solid #1e1f22;
   color:#dbdee1; display:flex; flex-direction:column; gap:12px;
+  max-height:90vh; overflow-y:auto;
 }
 .modal h3 { font-size:16px; font-weight:700; margin-bottom:4px; color:#fff; }
 .modal label { font-size:11px; font-weight:600; text-transform:uppercase; color:#949ba4; margin-bottom:-2px;}
@@ -194,9 +195,8 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 .dd-hint { margin-left:auto; color:#5c6068; font-size:10px; }
 .dd-sep { height:1px; background:#2e3035; margin:3px 4px; }
 .dd-item.active { background:#4752c4; color:#fff; }
-/* Tool controls live inside the Canvas dropdown — render full width under each tool */
-.dropdown-menu .brush-ui, .dropdown-menu .erase-ui { width:100%; margin:2px 0; box-sizing:border-box; }
-.dropdown-menu .brush-ui.active, .dropdown-menu .erase-ui.active { display:flex; }
+/* Tool controls live inside the Canvas dropdown — always visible, full width under each tool */
+.dropdown-menu .brush-ui, .dropdown-menu .erase-ui { display:flex; width:100%; margin:2px 0; box-sizing:border-box; }
 .dropdown-menu .brush-ui input[type="range"], .dropdown-menu .erase-ui input[type="range"] { flex:1; min-width:80px; }
 
 /* Dynamic Task List styling */
@@ -346,11 +346,6 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
         <div class="dd-item" onclick="exportImage('jpeg');closeDD()">⬇️ Export JPEG</div>
       </div>
     </div>
-
-    <div class="tb-div"></div>
-    <button class="btn" onclick="zB(-0.1)">−</button>
-    <span class="zl" id="zl">100%</span>
-    <button class="btn" onclick="zB(0.1)">+</button>
   </div>
 </div>
 
@@ -383,6 +378,17 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
       </div>
     </div>
     <div class="color-shelf-panel" id="modal-shelf"></div>
+
+    <label>Image</label>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img id="edit-img-preview" alt="" style="display:none; width:72px; height:72px; object-fit:cover; border-radius:6px; border:1px solid #3a3c42; background:#2a2b2f;">
+      <span id="edit-img-empty" style="font-size:12px; color:#8a8f98;">No image attached</span>
+      <div style="display:flex; gap:6px; margin-left:auto;">
+        <button class="btn" type="button" onclick="document.getElementById('edit-img-file').click()" style="height:26px; padding:0 10px; font-size:12px;">🖼️ Add / Change</button>
+        <button class="btn" type="button" id="edit-img-remove" onclick="removeEditImage()" style="height:26px; padding:0 10px; font-size:12px; display:none;">Remove</button>
+      </div>
+    </div>
+    <input type="file" id="edit-img-file" accept="image/*" style="display:none;">
 
     <div style="display:flex; align-items:center; gap:8px; margin: 2px 0;">
       <input type="checkbox" id="edit-complete" style="cursor:pointer; width:16px; height:16px;">
@@ -553,11 +559,21 @@ function updateNodeText(n) {
 let historyStack = [];
 let historyIdx = -1;
 
+function serializeForStore() {
+  return JSON.stringify({ nodes, links, strokes, canvasImages, groups, _id, favoriteColors });
+}
+
+// Local persistence fallback — survives reloads even when Firebase writes fail
+// silently (offline / rules / quota), so the roadmap never disappears on revisit.
+function writeLocal(stateStr) {
+  try { localStorage.setItem('rm_state_' + getRoomId(), stateStr || serializeForStore()); } catch {}
+}
+
+// Every committed canvas mutation must call this so the change is captured by undo,
+// persisted locally, and broadcast to collaborators. (saveState -> broadcastState.)
 function saveState() {
-  const state = JSON.stringify({ nodes, links, strokes, canvasImages, groups, _id, favoriteColors });
-  // Local persistence fallback — survives reloads even when Firebase writes fail
-  // silently (offline / rules / quota), so the roadmap never disappears on revisit.
-  try { localStorage.setItem('rm_state_' + getRoomId(), state); } catch {}
+  const state = serializeForStore();
+  writeLocal(state);
   if (historyIdx < historyStack.length - 1) {
     historyStack = historyStack.slice(0, historyIdx + 1);
   }
@@ -565,6 +581,17 @@ function saveState() {
   historyIdx++;
   updateHistoryButtons();
   broadcastState();
+}
+
+// Establish the current canvas as the undo baseline, so the very next action is
+// undoable and undo can return to the as-loaded state. Called once after a project's
+// initial state is loaded (Firebase first sync, or offline localStorage restore).
+let _historySeeded = false;
+function seedHistory() {
+  historyStack = [serializeForStore()];
+  historyIdx = 0;
+  _historySeeded = true;
+  updateHistoryButtons();
 }
 
 function loadState(stateStr) {
@@ -593,8 +620,8 @@ function loadLocalState() {
   return false;
 }
 
-function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); broadcastState(); } }
-function redo() { if (historyIdx < historyStack.length - 1) { historyIdx++; loadState(historyStack[historyIdx]); broadcastState(); } }
+function undo() { if (historyIdx > 0) { historyIdx--; loadState(historyStack[historyIdx]); writeLocal(historyStack[historyIdx]); broadcastState(); } }
+function redo() { if (historyIdx < historyStack.length - 1) { historyIdx++; loadState(historyStack[historyIdx]); writeLocal(historyStack[historyIdx]); broadcastState(); } }
 function updateHistoryButtons() {
   document.getElementById('btn-undo').classList.toggle('muted', historyIdx <= 0);
   document.getElementById('btn-redo').classList.toggle('muted', historyIdx >= historyStack.length - 1);
@@ -1575,6 +1602,25 @@ cv.addEventListener('dblclick', e => {
   if (g) openGroupEdit(g);
 });
 
+// Node image staging for the edit modal:
+//   undefined = unchanged · a dataURL = new image · '' = removed.
+// Applied to the node only on Save, so Cancel discards the change.
+let _editImgStaged;
+function renderEditImage(src) {
+  const prev = document.getElementById('edit-img-preview');
+  const empty = document.getElementById('edit-img-empty');
+  const rm = document.getElementById('edit-img-remove');
+  if (src) { prev.src = src; prev.style.display = ''; empty.style.display = 'none'; rm.style.display = ''; }
+  else { prev.removeAttribute('src'); prev.style.display = 'none'; empty.style.display = ''; rm.style.display = 'none'; }
+}
+function removeEditImage() { _editImgStaged = ''; renderEditImage(''); }
+document.getElementById('edit-img-file').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => { _editImgStaged = ev.target.result; cacheImage(_editImgStaged); renderEditImage(_editImgStaged); };
+  reader.readAsDataURL(file); e.target.value = '';
+});
+
 function startEdit(n) {
   _et = n;
   document.getElementById('edit-title').value = n.name || '';
@@ -1582,6 +1628,8 @@ function startEdit(n) {
   document.getElementById('edit-cat').value = n.cat || '';
   document.getElementById('edit-color').value = n.color || COLORS[0];
   document.getElementById('edit-complete').checked = !!n.complete;
+  _editImgStaged = undefined;
+  renderEditImage(n.img);
   
   // Rehydrate Task Element Children
   const container = document.getElementById('modal-tasks-list');
@@ -1641,7 +1689,10 @@ function commitEdit() {
     }
   });
   _et.tasks = compiledTasks;
-  
+
+  // Apply staged image change (if any): dataURL = set, '' = remove.
+  if (_editImgStaged !== undefined) _et.img = _editImgStaged || undefined;
+
   updateNodeText(_et);
   closeEdit(); saveState(); scheduleDraw();
 }
@@ -1777,15 +1828,8 @@ cv.addEventListener('wheel', e => {
   let ns = sc * zoomFactor;
   ns = Math.max(SCMIN, Math.min(SCMAX, ns));
   const r = ns / sc; px = p.x - r * (p.x - px); py = p.y - r * (p.y - py); sc = ns;
-  draw(); document.getElementById('zl').textContent = Math.round(sc * 100) + '%';
+  draw();
 }, { passive: false });
-
-function zB(d) {
-  let ns = d > 0 ? sc * 1.2 : sc * 0.8; 
-  ns = Math.max(SCMIN, Math.min(SCMAX, ns));
-  const r = ns / sc; px = W / 2 - r * (W / 2 - px); py = H / 2 - r * (H / 2 - py); sc = ns;
-  draw(); document.getElementById('zl').textContent = Math.round(sc * 100) + '%';
-}
 
 // ═══════════════════════════════════════════════════════════
 // CANVAS INDEPENDENT STANDALONE FILE PIPELINE 
@@ -2120,6 +2164,7 @@ function startFirebase() {
       '\nFirebase is not configured. Edit FIREBASE_CONFIG in the HTML to enable live collaboration.'
     );
     loadLocalState(); // offline mode — restore whatever was last saved locally
+    seedHistory();    // baseline so undo works from the first action
     return;
   }
 
@@ -2149,7 +2194,7 @@ function startFirebase() {
   _db.ref('rooms/' + roomId + '/state').on('value', snap => {
     try {
       const data = snap.val();
-      if (!data) { broadcastState(); return; }
+      if (!data) { broadcastState(); if (!_historySeeded) seedHistory(); return; }
       if (data._sender && data._sender === myUser.id) return;
       nodes        = data.nodes        || [];
       links        = data.links        || [];
@@ -2162,6 +2207,8 @@ function startFirebase() {
       canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
       renderFavColors();
       scheduleDraw();
+      // Capture the first synced state as the undo baseline (once).
+      if (!_historySeeded) seedHistory();
     } catch(e) { console.error('Failed to apply remote state:', e); }
   });
 

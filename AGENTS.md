@@ -205,7 +205,12 @@ The eraser size slider (`#erase-size`) ranges 4–800. `clearAllDrawings()` (�
 
 The link tool button is labeled **"Link/Unlink"** — clicking an existing link endpoint removes it; clicking a new pair creates one. The toolbar button text reflects both actions.
 
-`Select` and `Link/Unlink` are top-level toolbar buttons. **`Draw` and `Erase` live inside the `🎨 Canvas ▾` dropdown** (`#dd-canvas`), each followed by its controls: `brush-ui` (color, size slider, favorites 🎨, Clear) under Draw, and `erase-ui` (size slider, Clear) under Erase. Those control rows are shown/hidden by `setTool` toggling `.active` on `#brush-ui`/`#erase-ui`, so picking a tool reveals its controls beneath it. The dropdown does **not** `closeDD()` on tool select (so you can adjust the slider); it closes when you click the canvas. `setTool` also toggles `.active` on `#canvas-dd-btn` so the Canvas button stays highlighted while a draw/erase tool is active.
+`Select` and `Link/Unlink` are top-level toolbar buttons. **`Draw` and `Erase` live inside the `🎨 Canvas ▾` dropdown** (`#dd-canvas`), each followed by its controls: `brush-ui` (color, size slider, favorites 🎨, Clear) under Draw, and `erase-ui` (size slider, Clear) under Erase. Both control rows are **always visible** inside the dropdown (CSS `.dropdown-menu .brush-ui/.erase-ui { display:flex }` overrides the default hidden state) — `setTool` still toggles `.active` on them but that no longer controls visibility here. The dropdown does **not** `closeDD()` on tool select (so you can adjust the slider); it closes when you click the canvas. `setTool` also toggles `.active` on `#canvas-dd-btn` so the Canvas button stays highlighted while a draw/erase tool is active.
+
+The zoom +/− buttons and the `%` label were removed from the toolbar. Zoom is now **scroll-wheel only** (still multiplicative; `zB()` and the `#zl` label no longer exist).
+
+### Edit Node Modal — Image
+The node edit modal (`#modal-overlay`) has an **Image** section: a 72×72 preview (`#edit-img-preview`), an "Add / Change" button (triggers hidden `#edit-img-file`), and a "Remove" button. The change is **staged** in `_editImgStaged` (`undefined` = unchanged, a dataURL = new image, `''` = removed) and applied to `_et.img` only in `commitEdit`, so Cancel discards it. The toolbar "Set Node Image" path still exists and applies immediately. The `.modal` is `max-height:90vh; overflow-y:auto` so it scrolls on short screens.
 
 - `setTool(t)` updates the active tool and adjusts brush UI visibility
 - WASD pan, scroll zoom, and right-click pan work regardless of active tool
@@ -213,10 +218,11 @@ The link tool button is labeled **"Link/Unlink"** — clicking an existing link 
 - Right-click on empty canvas = pan
 
 ### History (Undo/Redo)
-- `saveState()` serializes all state to JSON and pushes onto `historyStack`
-- `loadState(str)` deserializes and replaces all state variables
-- `undo()` and `redo()` both call `broadcastState()` directly (they bypass `saveState`)
-- History is **local per user** — undo on one client undoes for everyone (it broadcasts)
+- `saveState()` is the single commit point: it serializes state (`serializeForStore()`), mirrors it to localStorage (`writeLocal`), pushes onto `historyStack`, and broadcasts. **Every committed canvas mutation must call `saveState()`** — that's the only way the change becomes undoable, persisted, and shared.
+- `seedHistory()` establishes the as-loaded state as the undo baseline (`historyStack = [current]`, `historyIdx = 0`). It runs **once** after a project's first state load — guarded by `_historySeeded` in the Firebase state listener (both the data and `!data` branches) and in the offline `loadLocalState` path. Without this baseline the first action wasn't undoable and undo couldn't return to the opened state.
+- `loadState(str)` deserializes and replaces all state variables (does **not** push history — used by undo/redo and import).
+- `undo()`/`redo()` move `historyIdx`, `loadState` that snapshot, then `writeLocal(snapshot)` **and** `broadcastState()` so the reverted state is persisted locally and shared (previously they only broadcast, leaving localStorage stale).
+- History is **local per user** — undo on one client broadcasts its previous state to everyone. Remote updates replace local state but are not pushed to history (documented limitation).
 
 ### Live Collaboration Flow
 ```
@@ -339,7 +345,7 @@ They must always show the same data and the same ⋯ dropdown options. Current p
 The original file had demo nodes that loaded on every page open. These were removed. New projects start blank.
 
 ### 2. Scroll zoom is multiplicative
-Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`. The zoom label shows `Math.round(sc * 100) + '%'`.
+Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`. Zoom is scroll-wheel only — the toolbar +/− buttons and `%` label were removed.
 
 ### 3. Image uploads are base64 in state
 Node images and standalone image frames are stored as base64 data URLs inside the state JSON. Large images will make Firebase writes slow. No CDN/storage is used — everything is embedded.
