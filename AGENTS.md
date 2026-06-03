@@ -181,7 +181,17 @@ Called on every `draw()`. Order matters:
 4. Milestone node cards
 5. Remote cursors overlay (called after `renderAll` in `draw()`)
 
-The eraser uses `globalCompositeOperation = 'destination-out'` which punches transparent holes. The export function composites the rendered canvas onto a solid background to prevent transparent holes in exported images. **That background is theme-aware** — `exportImage` fills it with `tc('#2c2d31', '#dde1e7')` so exports match the chosen light/dark mode (the on-screen `.cw` canvas backgrounds).
+### Stroke Layer Isolation (Critical — Eraser)
+
+Brush/eraser strokes are **not** drawn directly on the main canvas. `renderAll` step 1 draws all strokes onto a reusable offscreen canvas (`getStrokeLayer`, sized to `ctx.canvas`), then composites that layer down with `drawImage` under an identity transform.
+
+This exists so the eraser's `globalCompositeOperation = 'destination-out'` only removes **brush ink within the layer** — it can no longer punch transparent holes through the group boxes (drawn at step 0, before the composite) or anything else. The layer copies the main canvas transform via `lctx.setTransform(ctx.getTransform())` so pan/zoom/DPR line up; it works for export too (identity transform, export-sized layer).
+
+> **Do not** draw strokes straight onto the main `ctx` again — that reintroduces the bug where erasing eats the group boxes and reveals the page background.
+
+The export function composites the rendered canvas onto a solid background to prevent transparent holes in exported images. **That background is theme-aware** — `exportImage` fills it with `tc('#2c2d31', '#dde1e7')` so exports match the chosen light/dark mode (the on-screen `.cw` canvas backgrounds). The on-screen eraser cursor gizmo is likewise themed: `tc('rgba(255,255,255,0.85)', 'rgba(0,0,0,0.7)')` (white in dark mode, black in light).
+
+The eraser size slider (`#erase-size`) ranges 4–800. `clearAllDrawings()` (🗑️ Clear button in both the brush and erase toolbars) confirms, then wipes `strokes` only — nodes, links, images and groups are kept — and calls `saveState()`.
 
 ### Node Layout: Single Source of Truth
 

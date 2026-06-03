@@ -306,12 +306,14 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
     <span class="brush-label">Size:</span>
     <input type="range" id="brush-size" min="1" max="20" value="4" title="Brush Size">
     <button class="btn" id="btn-brush-palette" onclick="toggleBrushShelf(event)" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
+    <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
   </div>
   <div class="color-shelf-pop" id="brush-shelf"></div>
 
   <div class="erase-ui" id="erase-ui">
     <span class="brush-label">Eraser:</span>
-    <input type="range" id="erase-size" min="4" max="400" value="18" title="Eraser Size">
+    <input type="range" id="erase-size" min="4" max="800" value="18" title="Eraser Size">
+    <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
   </div>
 
   <div class="tb-r">
@@ -846,6 +848,18 @@ function hitGroupResizeHandle(sx, sy, g) {
 // ═══════════════════════════════════════════════════════════
 // DRAWING ENGINE PRIMITIVES
 // ═══════════════════════════════════════════════════════════
+// Reusable offscreen canvas for the brush/eraser layer. Strokes are drawn here
+// in isolation so the eraser's 'destination-out' only removes brush ink — it can
+// never punch transparent holes through the group boxes, nodes, or background.
+let _strokeLayer = null;
+function getStrokeLayer(w, h) {
+  if (!_strokeLayer) _strokeLayer = document.createElement('canvas');
+  const l = _strokeLayer;
+  if (l.width !== w || l.height !== h) { l.width = w; l.height = h; } // resizing also clears it
+  else { const c = l.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h); }
+  return l;
+}
+
 function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
   const Lws = (wx, wy) => ({ x: wx * sc + px, y: wy * sc + py });
 
@@ -861,46 +875,57 @@ function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
   // 0. Draw Group Boxes (background, behind everything)
   groups.forEach(g => { if (inView(g.x, g.y, g.w, g.h)) drawGroup(ctx, g, sc, px, py, isExport); });
 
-  // 1. Draw Brush Strokes (Including Erased Areas)
-  ctx.save();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  strokes.forEach(s => {
-    if (s.points.length === 0) return;
-    
-    ctx.beginPath();
-    // Allow single click dots for drawing and erasing
-    if (s.points.length === 1) {
-      const p = Lws(s.points[0].x, s.points[0].y);
-      ctx.arc(p.x, p.y, (s.width || 3) * sc / 2, 0, Math.PI * 2);
-      ctx.fillStyle = s.isEraser ? 'rgba(0,0,0,1)' : (s.color || '#404552');
-      if (s.isEraser) ctx.globalCompositeOperation = 'destination-out';
-      ctx.fill();
-      ctx.globalCompositeOperation = 'source-over';
-      return;
-    }
-    
-    const p0 = Lws(s.points[0].x, s.points[0].y);
-    ctx.moveTo(p0.x, p0.y);
-    for (let i = 1; i < s.points.length; i++) {
-      const p = Lws(s.points[i].x, s.points[i].y);
-      ctx.lineTo(p.x, p.y);
-    }
-    
-    if (s.isEraser) {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = s.color || '#404552';
-    }
-    
-    ctx.lineWidth = (s.width || 3) * sc;
-    ctx.stroke();
-    
-    // Reset immediately back to normal rendering state
-    ctx.globalCompositeOperation = 'source-over'; 
-  });
-  ctx.restore();
+  // 1. Draw Brush Strokes on an ISOLATED layer, then composite it down.
+  //    Erasing only removes brush ink within this layer — the group boxes drawn
+  //    above (and everything drawn below) are never touched by 'destination-out'.
+  if (strokes.length) {
+    const layer = getStrokeLayer(ctx.canvas.width, ctx.canvas.height);
+    const lctx = layer.getContext('2d');
+    lctx.setTransform(ctx.getTransform()); // match the main canvas pan/zoom/DPR
+    lctx.save();
+    lctx.lineCap = 'round'; lctx.lineJoin = 'round';
+    strokes.forEach(s => {
+      if (s.points.length === 0) return;
+
+      lctx.beginPath();
+      // Allow single click dots for drawing and erasing
+      if (s.points.length === 1) {
+        const p = Lws(s.points[0].x, s.points[0].y);
+        lctx.arc(p.x, p.y, (s.width || 3) * sc / 2, 0, Math.PI * 2);
+        lctx.fillStyle = s.isEraser ? 'rgba(0,0,0,1)' : (s.color || '#404552');
+        lctx.globalCompositeOperation = s.isEraser ? 'destination-out' : 'source-over';
+        lctx.fill();
+        lctx.globalCompositeOperation = 'source-over';
+        return;
+      }
+
+      const p0 = Lws(s.points[0].x, s.points[0].y);
+      lctx.moveTo(p0.x, p0.y);
+      for (let i = 1; i < s.points.length; i++) {
+        const p = Lws(s.points[i].x, s.points[i].y);
+        lctx.lineTo(p.x, p.y);
+      }
+
+      if (s.isEraser) {
+        lctx.globalCompositeOperation = 'destination-out';
+        lctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+        lctx.globalCompositeOperation = 'source-over';
+        lctx.strokeStyle = s.color || '#404552';
+      }
+
+      lctx.lineWidth = (s.width || 3) * sc;
+      lctx.stroke();
+      lctx.globalCompositeOperation = 'source-over';
+    });
+    lctx.restore();
+
+    // Composite the stroke layer onto the main canvas 1:1 (device pixels)
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(layer, 0, 0);
+    ctx.restore();
+  }
 
   // 2. Draw Standalone Framed Images
   canvasImages.forEach(img => {
@@ -1184,7 +1209,7 @@ function draw() {
     ctx.save();
     ctx.beginPath();
     ctx.arc(_mouseScreen.x, _mouseScreen.y, Math.max(r, 2), 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.strokeStyle = tc('rgba(255,255,255,0.85)', 'rgba(0,0,0,0.7)'); // white in dark mode, black in light
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
     ctx.stroke();
@@ -1806,6 +1831,14 @@ fiImg.addEventListener('change', e => {
   };
   reader.readAsDataURL(file); e.target.value = '';
 });
+
+// Remove every brush/eraser stroke (nodes, links, images and groups are kept).
+function clearAllDrawings() {
+  if (strokes.length === 0) return;
+  if (!confirm('Clear all drawings? This removes every brush and eraser stroke. Nodes, links, images and groups are kept.')) return;
+  strokes = [];
+  saveState(); scheduleDraw();
+}
 
 function saveJSON() {
   const d = { v: 4, nodes, links, strokes, canvasImages, _id };
