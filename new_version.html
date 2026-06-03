@@ -721,8 +721,10 @@ function setTool(t) {
   document.getElementById('erase-ui').classList.toggle('active', t === 'erase');
   // Highlight the Canvas dropdown button while a draw/erase tool is active
   document.getElementById('canvas-dd-btn').classList.toggle('active', t === 'draw' || t === 'erase');
-  // Hide OS cursor when erasing so the preview circle is the cursor
-  document.querySelector('canvas').style.cursor = t === 'erase' ? 'none' : '';
+  // Cursor per tool: hide it when erasing (the preview circle is the cursor),
+  // show a horizontal double-arrow (↔) in link mode so users know they're linking.
+  const toolCursors = { erase: 'none', link: 'ew-resize' };
+  document.querySelector('canvas').style.cursor = toolCursors[t] || '';
 }
 setTool('select');
 

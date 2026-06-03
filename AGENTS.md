@@ -214,7 +214,7 @@ The zoom +/− buttons and the `%` label were removed from the toolbar. Zoom is 
 ### Edit Node Modal — Image
 The node edit modal (`#modal-overlay`) has an **Image** section: a 72×72 preview (`#edit-img-preview`), an "Add / Change" button (triggers hidden `#edit-img-file`), and a "Remove" button. The change is **staged** in `_editImgStaged` (`undefined` = unchanged, a dataURL = new image, `''` = removed) and applied to `_et.img` only in `commitEdit`, so Cancel discards it. The toolbar "Set Node Image" path still exists and applies immediately. The `.modal` is `max-height:90vh; overflow-y:auto` so it scrolls on short screens.
 
-- `setTool(t)` updates the active tool and adjusts brush UI visibility
+- `setTool(t)` updates the active tool and adjusts brush UI visibility. It also sets the canvas cursor per tool (`toolCursors` map): `none` for erase (the preview circle is the cursor), `ew-resize` (↔) for link so users know they're linking, default otherwise.
 - WASD pan, scroll zoom, and right-click pan work regardless of active tool
 - Right-click on a node opens the context menu (not pan)
 - Right-click on empty canvas = pan
