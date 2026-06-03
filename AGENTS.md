@@ -374,6 +374,8 @@ Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`
 ### 3. Image uploads are base64 in state
 Node images and standalone image frames are stored as base64 data URLs inside the state JSON. Large images will make Firebase writes slow. No CDN/storage is used — everything is embedded.
 
+All three image inputs (node-image edit modal, toolbar "Set Node Image" `#fi-img`, canvas "Image Frame" `#fi-canvas-img`) go through **`readImageFile(file, cb)`**. For normal images it reads a data URL; for **`.dds`** it runs the built-in decoder (`decodeDDSToCanvas`) and converts to a **PNG data URL**, so the rest of the app (cache/render/persist) is unchanged. Supported DDS formats: **DXT1/BC1, DXT3/BC2, DXT5/BC3, and uncompressed RGB/RGBA** (incl. DX10-header BC1–3). **BC4/BC5/BC7 are not supported** — those alert the user to re-export. The decoder is pure JS (no deps); `accept="image/*,.dds"` on the inputs.
+
 ### 4. The eraser punches transparent holes
 Eraser strokes use `destination-out` compositing, but only on the **isolated stroke layer** (see "Stroke Layer Isolation") — never on the main canvas. The canvas background color is only painted during export (via a base canvas layer). On-screen, the canvas element is transparent and the CSS `background` of `.cw` shows through erased areas.
 
