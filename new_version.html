@@ -2165,6 +2165,30 @@ function serializeStateLive() {
   return Object.assign(serializeState(), { _sender: myUser.id });
 }
 
+// ── Site-wide user registry (roster on the projects page) ─
+// /users/{id} = { name, color, online, lastActive }. Marks you online while the
+// editor is open and records lastActive on disconnect.
+let _presenceArmed = false;
+function syncMyUserRecord() {
+  if (!_db || !myUser.id) return;
+  _db.ref('users/' + myUser.id).update({
+    name: myUser.name, color: myUser.color,
+    lastActive: firebase.database.ServerValue.TIMESTAMP
+  }).catch(() => {});
+}
+function armPresence() {
+  if (!_db || !myUser.id || _presenceArmed) return;
+  _presenceArmed = true;
+  const ref = _db.ref('users/' + myUser.id);
+  _db.ref('.info/connected').on('value', snap => {
+    if (!snap.val()) return;
+    ref.child('online').onDisconnect().set(false);
+    ref.child('lastActive').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+    ref.child('online').set(true);
+    syncMyUserRecord();
+  });
+}
+
 // ── State broadcast (debounced 150 ms) ───────────────────
 let _broadcastTimer = null;
 function broadcastState() {
@@ -2240,6 +2264,8 @@ function startFirebase() {
   myPresRef.set({ name: myUser.name, color: myUser.color });
   myPresRef.onDisconnect().remove();
   _db.ref('rooms/' + roomId + '/cursors/' + myUser.id).onDisconnect().remove();
+
+  armPresence(); // site-wide roster: mark online + track last active
 
   // Canvas state sync
   _db.ref('rooms/' + roomId + '/state').on('value', snap => {

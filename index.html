@@ -229,6 +229,18 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 [data-theme="light"] .modal-label{color:#5c6068;}
 [data-theme="light"] .swatch.active{border-color:#1a1b1e;}
 
+/* ── People / Roster ──────────────────────────────────── */
+.roster-list{display:flex;flex-direction:column;max-height:55vh;overflow-y:auto;margin:-4px 0;}
+.roster-row{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid #3a3c42;}
+.roster-row:last-child{border-bottom:none;}
+.roster-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;}
+.roster-name{flex:1;font-size:13px;color:#fff;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.roster-status{width:9px;height:9px;border-radius:50%;background:#747f8d;flex-shrink:0;}
+.roster-status.online{background:#3ba55d;box-shadow:0 0 0 3px rgba(59,165,93,0.25);}
+.roster-meta{font-size:11px;color:#949ba4;white-space:nowrap;}
+[data-theme="light"] .roster-name{color:#1a1b1e;}
+[data-theme="light"] .roster-row{border-bottom-color:#e3e5e8;}
+
 /* ── Name overlay ─────────────────────────────────────── */
 #name-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
@@ -326,6 +338,7 @@ html[data-theme="light"]{background:#f2f3f5;}
     <span class="section-title">Projects</span>
   </div>
   <div class="toolbar-right">
+    <button class="btn" id="roster-btn" onclick="showRoster()" title="See who has joined">👥 People</button>
     <button class="btn" id="archived-toggle" onclick="toggleShowArchived()" title="Show archived projects">📦 Show Archived</button>
     <select class="sort-select" id="sort-select" onchange="setSortBy(this.value)">
       <option value="lastModified">Last Modified</option>
@@ -383,6 +396,17 @@ html[data-theme="light"]{background:#f2f3f5;}
   </div>
 </div>
 
+<!-- People / Roster Modal -->
+<div class="modal-overlay" id="roster-modal">
+  <div class="modal" style="width:420px;">
+    <h3>People <span id="roster-count" style="color:#949ba4;font-weight:600;font-size:13px;"></span></h3>
+    <div class="roster-list" id="roster-list"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideRoster()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Project right-click context menu -->
 <div id="proj-ctx-menu"></div>
 
@@ -418,6 +442,7 @@ let myUser = { id:'', name:'', color:'' };
 let _deleteTargetId = null;
 let _allProjects = {};
 let _allPresence = {};
+let _allUsers = {};
 let sortBy = localStorage.getItem('rm_sort') || 'lastModified';
 let viewMode = localStorage.getItem('rm_view') || 'grid';
 let searchQuery = '';
@@ -513,6 +538,7 @@ function hideProfile() { document.getElementById('profile-modal').classList.remo
 function saveProfile() {
   const name = document.getElementById('profile-name-input').value.trim() || 'User';
   initMyUser(name, _profileSel.color);
+  syncMyUserRecord(); // push updated name/color to the roster
   hideProfile();
 }
 
@@ -548,6 +574,68 @@ function initFirebase() {
     });
     render();
   });
+
+  // Site-wide user roster
+  _db.ref('users').on('value', snap => {
+    _allUsers = snap.val() || {};
+    if (document.getElementById('roster-modal').classList.contains('show')) renderRoster();
+  });
+
+  armPresence();
+}
+
+// ── Site-wide user registry (roster) ──────────────────────
+// /users/{id} = { name, color, online, lastActive }. Written from both pages so
+// "online" reflects an open tab anywhere and lastActive tracks recent activity.
+let _presenceArmed = false;
+function syncMyUserRecord() {
+  if (!_db || !myUser.id) return;
+  _db.ref('users/' + myUser.id).update({
+    name: myUser.name, color: myUser.color,
+    lastActive: firebase.database.ServerValue.TIMESTAMP
+  }).catch(() => {});
+}
+function armPresence() {
+  if (!_db || !myUser.id || _presenceArmed) return;
+  _presenceArmed = true;
+  const ref = _db.ref('users/' + myUser.id);
+  _db.ref('.info/connected').on('value', snap => {
+    if (!snap.val()) return;
+    ref.child('online').onDisconnect().set(false);
+    ref.child('lastActive').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+    ref.child('online').set(true);
+    syncMyUserRecord();
+  });
+}
+
+function showRoster() { renderRoster(); document.getElementById('roster-modal').classList.add('show'); }
+function hideRoster() { document.getElementById('roster-modal').classList.remove('show'); }
+function renderRoster() {
+  const list = document.getElementById('roster-list');
+  const users = Object.entries(_allUsers || {});
+  document.getElementById('roster-count').textContent = users.length ? `(${users.length})` : '';
+  if (!users.length) {
+    list.innerHTML = '<div style="color:#949ba4;font-size:13px;padding:16px 2px;">No one has joined yet.</div>';
+    return;
+  }
+  users.sort((a, b) => {
+    const ao = a[1].online ? 1 : 0, bo = b[1].online ? 1 : 0;
+    if (ao !== bo) return bo - ao;
+    return (b[1].lastActive || 0) - (a[1].lastActive || 0);
+  });
+  list.innerHTML = users.map(([uid, u]) => {
+    const online = !!u.online;
+    const me = uid === myUser.id;
+    const name = esc(u.name || 'User') + (me ? ' <span style="color:#949ba4;font-weight:400;">(you)</span>' : '');
+    const initial = esc((u.name || '?')[0].toUpperCase());
+    const status = online ? 'Online now' : 'Last active ' + timeAgo(u.lastActive);
+    return `<div class="roster-row">
+      <div class="roster-avatar" style="background:${esc(u.color || '#999')}">${initial}</div>
+      <div class="roster-name">${name}</div>
+      <span class="roster-status ${online ? 'online' : ''}"></span>
+      <span class="roster-meta">${status}</span>
+    </div>`;
+  }).join('');
 }
 
 // ── Render ────────────────────────────────────────────────
@@ -931,7 +1019,7 @@ function closeProjCtxMenu() {
 }
 
 document.addEventListener('click',   () => closeProjCtxMenu());
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProjCtxMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeProjCtxMenu(); hideRoster(); } });
 
 // ── Theme ─────────────────────────────────────────────────
 function applyTheme(t) {

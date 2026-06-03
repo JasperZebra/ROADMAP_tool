@@ -121,7 +121,22 @@ const FIREBASE_CONFIG = {
       {userId}/
         wx: number (world x)
         wy: number (world y)
+
+/users/                       (site-wide roster — see below)
+  {userId}/
+    name:        string
+    color:       string (hex)
+    online:      boolean (true while a tab is connected; onDisconnect → false)
+    lastActive:  timestamp (ms, ServerValue.TIMESTAMP; also set onDisconnect)
 ```
+
+### Site-wide User Roster (`/users`)
+
+`/rooms/{id}/presence` is **per-room and ephemeral** (removed on disconnect) — it only says who's in a given room right now. The persistent **`/users/{id}`** registry powers the **👥 People** roster (button left of "Show Archived" on `index.html`, `#roster-modal`).
+
+- `armPresence()` (in **both** `index.html` and `new_version.html`, guarded by `_presenceArmed`) attaches a `.info/connected` listener that sets `online:true` and arms `onDisconnect()` to set `online:false` + `lastActive` (server timestamp). `syncMyUserRecord()` writes `name`/`color`/`lastActive`. Called on Firebase init in both pages and after `saveProfile()`.
+- The roster lists everyone from `/users`, sorted online-first then by `lastActive`, showing a green/grey status dot and "Online now" or "Last active …" (`timeAgo`).
+- Caveat: `online` is a single boolean per user, not a connection count — closing one of several open tabs flips you offline. Acceptable for now.
 
 ### Local Persistence Fallback (Critical)
 
