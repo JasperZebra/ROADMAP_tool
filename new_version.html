@@ -46,6 +46,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;background:#1e1f
 .swatch { width:15px; height:15px; border-radius:50%; cursor:pointer; border:2px solid transparent; flex-shrink:0; transition:border-color .1s, transform .1s; }
 .swatch:hover { border-color:#fff; transform:scale(1.15); }
 .swatch.active { border-color:#fff; }
+#join-swatches .swatch { width:24px; height:24px; }
 
 /* ── Layout ───────────────────────────────────────────── */
 .ws{position:fixed;top:48px;left:0;right:0;bottom:0;display:flex;}
@@ -417,8 +418,9 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 <div id="name-overlay">
   <div class="name-modal">
     <h2>Join Session</h2>
-    <p>Enter a display name so collaborators can see who you are on the canvas.</p>
+    <p>Pick a name and dot color so collaborators can see who you are on the canvas.</p>
     <input type="text" id="name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <div class="swatch-row" id="join-swatches" style="justify-content:center;flex-wrap:wrap;margin:12px 0;"></div>
     <button class="btn blue" onclick="confirmName()" style="justify-content:center;height:40px;font-size:13px;font-weight:600;">Join →</button>
   </div>
 </div>
@@ -2015,12 +2017,13 @@ function getStoredUser() {
   try { return JSON.parse(localStorage.getItem('rm_collab_user') || 'null'); } catch { return null; }
 }
 
-function initMyUser(name) {
+function initMyUser(name, color) {
   let stored = getStoredUser() || {
     id: Math.random().toString(36).slice(2, 12),
     color: COLLAB_COLORS[Math.floor(Math.random() * COLLAB_COLORS.length)]
   };
   stored.name = name || stored.name || 'User';
+  if (color) stored.color = color;
   localStorage.setItem('rm_collab_user', JSON.stringify(stored));
   myUser = stored;
 }
@@ -2030,13 +2033,32 @@ function getRoomId() {
 }
 
 // ── Name prompt ──────────────────────────────────────────
+const _joinSel = { color: null };
+function renderJoinSwatches() {
+  const row = document.getElementById('join-swatches');
+  if (!row) return;
+  if (!_joinSel.color) {
+    const stored = getStoredUser();
+    _joinSel.color = (stored && stored.color) || COLLAB_COLORS[Math.floor(Math.random() * COLLAB_COLORS.length)];
+  }
+  row.innerHTML = '';
+  COLLAB_COLORS.forEach(col => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch' + (col === _joinSel.color ? ' active' : '');
+    sw.style.background = col;
+    sw.title = col;
+    sw.onclick = () => { _joinSel.color = col; renderJoinSwatches(); };
+    row.appendChild(sw);
+  });
+}
+
 document.getElementById('name-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') confirmName();
 });
 
 function confirmName() {
   const name = document.getElementById('name-input').value.trim() || 'User';
-  initMyUser(name);
+  initMyUser(name, _joinSel.color);
   document.getElementById('name-overlay').style.display = 'none';
   startFirebase();
 }
@@ -2405,8 +2427,9 @@ applyCanvasBg();
     document.getElementById('name-overlay').style.display = 'none';
     startFirebase();
     updatePresenceBar();
+  } else {
+    renderJoinSwatches(); // name-overlay is visible by default; let them pick a dot color
   }
-  // else: name-overlay is visible by default, confirmName() handles the rest
 })();
 </script>
 </body>

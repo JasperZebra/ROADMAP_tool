@@ -76,6 +76,16 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 
 .projects-list{display:flex;flex-direction:column;gap:6px;}
 
+/* ── Sectioned layout (Pinned / All Projects) ─────────── */
+.projects-sections{display:flex;flex-direction:column;gap:10px;}
+.section-title{
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:#949ba4;margin:6px 2px -2px;
+}
+.section-title:not(:first-child){margin-top:14px;}
+[data-theme="light"] .section-title{color:#5c6068;}
+
 /* ── Grid card ────────────────────────────────────────── */
 .project-card{
   background:#2b2d31;border:1px solid #1e1f22;border-radius:10px;
@@ -209,6 +219,13 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 }
 .modal input[type="text"]:focus{border-color:#7289da;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+.modal-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#949ba4;margin-bottom:-8px;}
+.swatch-row{display:flex;flex-wrap:wrap;gap:8px;}
+.swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .1s,transform .1s;}
+.swatch:hover{transform:scale(1.12);}
+.swatch.active{border-color:#fff;}
+[data-theme="light"] .modal-label{color:#5c6068;}
+[data-theme="light"] .swatch.active{border-color:#1a1b1e;}
 
 /* ── Name overlay ─────────────────────────────────────── */
 #name-overlay{
@@ -295,7 +312,7 @@ html[data-theme="light"]{background:#f2f3f5;}
   </div>
   <div class="header-right">
     <div class="online-dot" id="online-dot" title="Connecting..."></div>
-    <span class="user-chip" id="user-chip" onclick="showChangeName()" title="Click to change name"></span>
+    <span class="user-chip" id="user-chip" onclick="showProfile()" title="Click to edit your profile"></span>
     <button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" style="font-size:15px;padding:0 8px;">☀️</button>
     <button class="btn blue" onclick="showNewProjectModal()">+ New Project</button>
   </div>
@@ -349,14 +366,17 @@ html[data-theme="light"]{background:#f2f3f5;}
   </div>
 </div>
 
-<!-- Change Name Modal -->
-<div class="modal-overlay" id="change-name-modal">
+<!-- Profile Modal -->
+<div class="modal-overlay" id="profile-modal">
   <div class="modal">
-    <h3>Change Display Name</h3>
-    <input type="text" id="change-name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <h3>Your Profile</h3>
+    <label class="modal-label">Display Name</label>
+    <input type="text" id="profile-name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <label class="modal-label">Dot Color</label>
+    <div class="swatch-row" id="profile-swatches"></div>
     <div class="modal-actions">
-      <button class="btn" onclick="hideChangeName()">Cancel</button>
-      <button class="btn blue" onclick="confirmChangeName()">Save</button>
+      <button class="btn" onclick="hideProfile()">Cancel</button>
+      <button class="btn blue" onclick="saveProfile()">Save</button>
     </div>
   </div>
 </div>
@@ -368,8 +388,9 @@ html[data-theme="light"]{background:#f2f3f5;}
 <div id="name-overlay" style="display:none;">
   <div class="name-modal">
     <h2>Welcome</h2>
-    <p>Enter a display name so collaborators can see who you are on the canvas.</p>
+    <p>Pick a display name and dot color so collaborators can see who you are.</p>
     <input type="text" id="name-input" placeholder="Your name..." maxlength="24" autocomplete="off">
+    <div class="swatch-row" id="welcome-swatches" style="margin:12px 0;"></div>
     <button class="btn blue" onclick="confirmName()" style="justify-content:center;height:40px;font-size:13px;font-weight:600;">Continue →</button>
   </div>
 </div>
@@ -404,42 +425,74 @@ let showArchived = false;
 function getStoredUser() {
   try { return JSON.parse(localStorage.getItem('rm_collab_user') || 'null'); } catch { return null; }
 }
-function initMyUser(name) {
+function initMyUser(name, color) {
   let stored = getStoredUser() || {
     id: Math.random().toString(36).slice(2, 12),
     color: COLLAB_COLORS[Math.floor(Math.random() * COLLAB_COLORS.length)]
   };
   stored.name = name || stored.name || 'User';
+  if (color) stored.color = color;
   localStorage.setItem('rm_collab_user', JSON.stringify(stored));
   myUser = stored;
-  document.getElementById('user-chip').textContent = '● ' + myUser.name;
+  renderUserChip();
+}
+
+function renderUserChip() {
+  const chip = document.getElementById('user-chip');
+  chip.innerHTML = '';
+  const dot = document.createElement('span');
+  dot.style.color = myUser.color || '#999';
+  dot.textContent = '●';
+  chip.appendChild(dot);
+  chip.appendChild(document.createTextNode(' ' + (myUser.name || 'User')));
+}
+
+// Render a color-swatch picker into `containerId`; clicking sets selected[key].
+// `selected` is an object so the chosen value survives re-renders.
+function renderSwatches(containerId, selected, key) {
+  const row = document.getElementById(containerId);
+  if (!row) return;
+  row.innerHTML = '';
+  COLLAB_COLORS.forEach(col => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch' + (col === selected[key] ? ' active' : '');
+    sw.style.background = col;
+    sw.title = col;
+    sw.onclick = () => { selected[key] = col; renderSwatches(containerId, selected, key); };
+    row.appendChild(sw);
+  });
 }
 
 // ── Name prompts ──────────────────────────────────────────
-['name-input','change-name-input'].forEach(id => {
+const _welcomeSel = { color: null };
+const _profileSel = { color: null };
+
+['name-input','profile-name-input'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') id === 'name-input' ? confirmName() : confirmChangeName();
-    if (e.key === 'Escape') id === 'change-name-input' && hideChangeName();
+    if (e.key === 'Enter') id === 'name-input' ? confirmName() : saveProfile();
+    if (e.key === 'Escape' && id === 'profile-name-input') hideProfile();
   });
 });
 
 function confirmName() {
   const name = document.getElementById('name-input').value.trim() || 'User';
-  initMyUser(name);
+  initMyUser(name, _welcomeSel.color);
   document.getElementById('name-overlay').style.display = 'none';
   initFirebase();
 }
 
-function showChangeName() {
-  document.getElementById('change-name-input').value = myUser.name;
-  document.getElementById('change-name-modal').classList.add('show');
-  setTimeout(() => document.getElementById('change-name-input').focus(), 50);
+function showProfile() {
+  document.getElementById('profile-name-input').value = myUser.name;
+  _profileSel.color = myUser.color;
+  renderSwatches('profile-swatches', _profileSel, 'color');
+  document.getElementById('profile-modal').classList.add('show');
+  setTimeout(() => document.getElementById('profile-name-input').focus(), 50);
 }
-function hideChangeName() { document.getElementById('change-name-modal').classList.remove('show'); }
-function confirmChangeName() {
-  const name = document.getElementById('change-name-input').value.trim() || 'User';
-  initMyUser(name);
-  hideChangeName();
+function hideProfile() { document.getElementById('profile-modal').classList.remove('show'); }
+function saveProfile() {
+  const name = document.getElementById('profile-name-input').value.trim() || 'User';
+  initMyUser(name, _profileSel.color);
+  hideProfile();
 }
 
 // ── Firebase ──────────────────────────────────────────────
@@ -490,18 +543,18 @@ function render() {
     entries = entries.filter(([, p]) => p.name && p.name.toLowerCase().includes(q));
   }
 
-  // Sort
-  entries.sort((a, b) => {
-    if (a[1].pinned && !b[1].pinned) return -1;
-    if (!a[1].pinned && b[1].pinned) return 1;
-    if (sortBy === 'name')         return (a[1].name || '').localeCompare(b[1].name || '');
-    if (sortBy === 'created')      return (b[1].created || 0) - (a[1].created || 0);
-    if (sortBy === 'nodes')        return (b[1].nodeCount || 0) - (a[1].nodeCount || 0);
+  // Sort within each group (pinned projects get their own section, below)
+  const cmp = (a, b) => {
+    if (sortBy === 'name')    return (a[1].name || '').localeCompare(b[1].name || '');
+    if (sortBy === 'created') return (b[1].created || 0) - (a[1].created || 0);
+    if (sortBy === 'nodes')   return (b[1].nodeCount || 0) - (a[1].nodeCount || 0);
     return (b[1].lastModified || 0) - (a[1].lastModified || 0);
-  });
+  };
+  const pinned = entries.filter(([, p]) => p.pinned).sort(cmp);
+  const rest   = entries.filter(([, p]) => !p.pinned).sort(cmp);
 
   const container = document.getElementById('projects-container');
-  container.className = viewMode === 'list' ? 'projects-list' : 'projects-grid';
+  container.className = 'projects-sections';
   container.innerHTML = '';
 
   if (entries.length === 0) {
@@ -509,9 +562,28 @@ function render() {
     return;
   }
 
-  entries.forEach(([id, proj]) => {
-    container.appendChild(viewMode === 'list' ? makeListRow(id, proj) : makeCard(id, proj));
-  });
+  const gridClass = viewMode === 'list' ? 'projects-list' : 'projects-grid';
+  const addSection = (title, list) => {
+    if (!list.length) return;
+    if (title) {
+      const h = document.createElement('div');
+      h.className = 'section-title';
+      h.textContent = title;
+      container.appendChild(h);
+    }
+    const grid = document.createElement('div');
+    grid.className = gridClass;
+    list.forEach(([id, proj]) => grid.appendChild(viewMode === 'list' ? makeListRow(id, proj) : makeCard(id, proj)));
+    container.appendChild(grid);
+  };
+
+  // Only show section headers when something is pinned; otherwise one clean list.
+  if (pinned.length) {
+    addSection('📌 Pinned', pinned);
+    addSection('All Projects', rest);
+  } else {
+    addSection(null, rest);
+  }
 }
 
 function makeCard(id, proj) {
@@ -830,6 +902,8 @@ applyTheme(localStorage.getItem('rm_theme') || 'dark');
     initMyUser(stored.name);
     initFirebase();
   } else {
+    _welcomeSel.color = COLLAB_COLORS[Math.floor(Math.random() * COLLAB_COLORS.length)];
+    renderSwatches('welcome-swatches', _welcomeSel, 'color');
     document.getElementById('name-overlay').style.display = 'flex';
   }
 })();

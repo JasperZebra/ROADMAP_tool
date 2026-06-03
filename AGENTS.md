@@ -150,7 +150,9 @@ This is the mechanism that prevents live drag/draw broadcasts from breaking the 
 - Stored in `localStorage` as `rm_collab_user` — a JSON object `{ id, name, color }`
 - `id` is a random string generated once, persistent across sessions
 - `name` is the display name shown on cursors and presence dots
-- `color` is randomly assigned from `COLLAB_COLORS` on first use
+- `color` is the presence/cursor dot color, chosen from `COLLAB_COLORS`
+- `initMyUser(name, color)` (both files) updates name and, if `color` is passed, the color. Both the **join overlay** (`new_version.html` `#name-overlay`, `#join-swatches`) and the **welcome overlay** (`index.html` `#name-overlay`, `#welcome-swatches`) let a new user pick name **and** dot color before entering.
+- In `index.html`, the header **user chip** (`#user-chip`) opens a **Profile modal** (`#profile-modal`) on click — edit display name + dot color (`#profile-swatches`). `renderUserChip()` draws the chip as a colored ● dot + name. `renderSwatches(containerId, selectedObj, key)` is the shared swatch-picker renderer. Identity changes are local; they propagate to a room's presence when you next open a project (presence is written in `new_version.html`).
 
 ---
 
@@ -306,7 +308,7 @@ let searchQuery = '';
 Both `sortBy` and `viewMode` are persisted in `localStorage`.
 
 ### Project Card Features
-- **Pin**: stored in Firebase, always sorts to top
+- **Pin**: stored in Firebase. Pinned projects render in their **own "📌 Pinned" section above** an "All Projects" section (see `render()` — it splits `entries` into `pinned`/`rest`, sorts each by the current `sortBy`, and appends sectioned grids/lists into `#projects-container`, now classed `projects-sections`). Section headers only appear when something is pinned.
 - **Complete**: shows ⭐ badge, gold border
 - **Archive**: hidden by default, shown with "Show Archived" toggle, appears dimmed
 - **Color**: accent dot + color picker, updates Firebase immediately
