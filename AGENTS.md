@@ -177,7 +177,7 @@ let px, py, sc;          // canvas pan (px, py) and zoom (sc)
 Called on every `draw()`. Order matters:
 1. Brush strokes (with eraser using `destination-out` compositing)
 2. Standalone image frames
-3. Bezier connection links (dashed if target is incomplete)
+3. Bezier connection links (dashed if target is incomplete; `bezConn` colors line + arrowhead with `tc('rgba(255,255,255,0.85)','rgba(0,0,0,0.7)')` — white in dark mode, black in light, matching the cursor gizmo)
 4. Milestone node cards
 5. Remote cursors overlay (called after `renderAll` in `draw()`)
 

@@ -1057,18 +1057,19 @@ function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
 function bezConn(c, ax, ay, bx, by, dashed, scale) {
   const dx = bx - ax;
   const cp = Math.max(30 * scale, Math.abs(dx) * 0.5);
+  const lineCol = tc('rgba(255,255,255,0.85)', 'rgba(0,0,0,0.7)'); // white in dark mode, black in light
   c.save();
   if (dashed) {
     c.setLineDash([4 * scale, 4 * scale]); // Dotted configuration
   }
   c.beginPath(); c.moveTo(ax, ay);
   c.bezierCurveTo(ax + cp, ay, bx - cp, by, bx, by);
-  c.strokeStyle = '#6a727d'; c.lineWidth = 2 * scale; c.stroke();
+  c.strokeStyle = lineCol; c.lineWidth = 2 * scale; c.stroke();
   c.restore();
-  
+
   const s = 6 * scale;
   c.beginPath(); c.moveTo(bx, by); c.lineTo(bx - s, by - s * .5); c.lineTo(bx - s, by + s * .5);
-  c.closePath(); c.fillStyle = '#6a727d'; c.fill();
+  c.closePath(); c.fillStyle = lineCol; c.fill();
 }
 
 function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
