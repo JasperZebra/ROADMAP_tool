@@ -2390,7 +2390,9 @@ function startFirebase() {
     }
   });
 
-  const myPresRef = _db.ref('rooms/' + roomId + '/presence/' + myUser.id);
+  // Presence lives in a lightweight top-level /presence node (NOT under /rooms),
+  // so the projects page can watch it without downloading any canvas state/images.
+  const myPresRef = _db.ref('presence/' + roomId + '/' + myUser.id);
   myPresRef.set({ name: myUser.name, color: myUser.color });
   myPresRef.onDisconnect().remove();
   _db.ref('rooms/' + roomId + '/cursors/' + myUser.id).onDisconnect().remove();
@@ -2420,7 +2422,7 @@ function startFirebase() {
   });
 
   // User presence (join / leave)
-  _db.ref('rooms/' + roomId + '/presence').on('value', snap => {
+  _db.ref('presence/' + roomId).on('value', snap => {
     const data = snap.val() || {};
     Object.keys(remoteCursors).forEach(uid => {
       if (!data[uid]) delete remoteCursors[uid];

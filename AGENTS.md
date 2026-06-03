@@ -113,14 +113,16 @@ const FIREBASE_CONFIG = {
       canvasImages: array
       _id:          number (next node ID counter)
       _sender:      string | undefined (only present on live mid-drag broadcasts)
-    presence/
-      {userId}/
-        name:  string
-        color: string
     cursors/
       {userId}/
         wx: number (world x)
         wy: number (world y)
+
+/presence/                    (per-room, ephemeral — kept OUT of /rooms on purpose)
+  {projectId}/
+    {userId}/
+      name:  string
+      color: string
 
 /users/                       (site-wide roster — see below)
   {userId}/
@@ -130,9 +132,18 @@ const FIREBASE_CONFIG = {
     lastActive:  timestamp (ms, ServerValue.TIMESTAMP; also set onDisconnect)
 ```
 
+### Bandwidth — Keep Heavy Data Off Broadly-Watched Paths (Critical)
+
+RTDB "Downloads" usage = bytes sent to listeners; a `.on('value')` re-downloads the **entire** watched node on **every** change under it. Two rules to avoid runaway egress (one 4 GB/day incident traced to breaking the first):
+
+1. **`index.html` must never listen to `/rooms`.** That tree holds every project's full canvas `state` (incl. base64 images) and `cursors`; watching it re-downloaded everything on every cursor tick. The projects page now watches only `/presence` (names/colors), `/projects` (metadata, no images), and `/users` (roster) — all image-free.
+2. **Presence is a top-level `/presence/{roomId}/{userId}` node, deliberately separate from `/rooms`** so the projects page can show "who's here" dots without pulling canvas state. Written/cleared by `new_version.html` (`onDisconnect().remove()`); deleting a project also removes `/presence/{id}`.
+
+Still-open opportunities if egress is high: base64 images live inside `/rooms/{id}/state`, so any edit re-sends them to everyone in that room (and to the editor's own listener). Biggest future win is moving images to Firebase Storage and storing only URLs, or splitting images into a sub-node so text/position edits don't re-download them.
+
 ### Site-wide User Roster (`/users`)
 
-`/rooms/{id}/presence` is **per-room and ephemeral** (removed on disconnect) — it only says who's in a given room right now. The persistent **`/users/{id}`** registry powers the **👥 People** roster (button left of "Show Archived" on `index.html`, `#roster-modal`).
+`/presence/{id}` is **per-room and ephemeral** (removed on disconnect) — it only says who's in a given room right now. The persistent **`/users/{id}`** registry powers the **👥 People** roster (button left of "Show Archived" on `index.html`, `#roster-modal`).
 
 - `armPresence()` (in **both** `index.html` and `new_version.html`, guarded by `_presenceArmed`) attaches a `.info/connected` listener that sets `online:true` and arms `onDisconnect()` to set `online:false` + `lastActive` (server timestamp). `syncMyUserRecord()` writes `name`/`color`/`lastActive`. Called on Firebase init in both pages and after `saveProfile()`.
 - The roster splits everyone from `/users` into **🟢 Online** and **⚪ Offline** sections, each sorted **alphabetically by name** (`localeCompare`, case-insensitive). Each row shows a green/grey status dot and "Online now" or "Last active …" (`timeAgo`). Section headers are sticky within the scrollable list.

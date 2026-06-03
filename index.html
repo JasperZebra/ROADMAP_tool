@@ -566,13 +566,11 @@ function initFirebase() {
     render();
   });
 
-  // Live presence across all rooms
-  _db.ref('rooms').on('value', snap => {
-    _allPresence = {};
-    const rooms = snap.val() || {};
-    Object.entries(rooms).forEach(([roomId, room]) => {
-      if (room.presence) _allPresence[roomId] = room.presence;
-    });
+  // Live presence across all rooms — read the lightweight top-level /presence node
+  // ONLY. (Listening to /rooms here would re-download every project's full canvas
+  // state, incl. base64 images, on every change anywhere — huge bandwidth waste.)
+  _db.ref('presence').on('value', snap => {
+    _allPresence = snap.val() || {};
     render();
   });
 
@@ -934,7 +932,8 @@ function confirmDelete() {
   if (!_deleteTargetId) return;
   Promise.all([
     _db.ref('projects/' + _deleteTargetId).remove(),
-    _db.ref('rooms/' + _deleteTargetId).remove()
+    _db.ref('rooms/' + _deleteTargetId).remove(),
+    _db.ref('presence/' + _deleteTargetId).remove()
   ]).then(hideDeleteModal);
 }
 
