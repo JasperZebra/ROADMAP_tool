@@ -1841,7 +1841,7 @@ function clearAllDrawings() {
 }
 
 function saveJSON() {
-  const d = { v: 4, nodes, links, strokes, canvasImages, _id };
+  const d = { v: 5, nodes, links, strokes, canvasImages, groups, _id, favoriteColors };
   const raw = (document.getElementById('project-name-label').textContent || 'roadmap').trim();
   const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'roadmap';
   const a = document.createElement('a');

@@ -343,7 +343,10 @@ Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`
 Node images and standalone image frames are stored as base64 data URLs inside the state JSON. Large images will make Firebase writes slow. No CDN/storage is used — everything is embedded.
 
 ### 4. The eraser punches transparent holes
-Eraser strokes use `destination-out` compositing. The canvas background color is only painted during export (via a base canvas layer). On-screen, the canvas element is transparent and the CSS `background` of `.cw` shows through erased areas.
+Eraser strokes use `destination-out` compositing, but only on the **isolated stroke layer** (see "Stroke Layer Isolation") — never on the main canvas. The canvas background color is only painted during export (via a base canvas layer). On-screen, the canvas element is transparent and the CSS `background` of `.cw` shows through erased areas.
+
+### 4b. JSON export must include every state array
+`saveJSON()` builds its own object literal (it does **not** call `serializeState()`), so it's easy to forget a field. It must include `groups` and `favoriteColors` alongside `nodes/links/strokes/canvasImages/_id` — omitting `groups` silently drops all group boxes (name, color, size, position) on export/import. `loadState()` already reads every field with `|| []` fallbacks. Keep `saveJSON` in sync with `serializeState` whenever a new top-level state array is added.
 
 ### 5. Right-click behavior splits on node hit
 `mousedown` with `button === 2`: if over a node, returns immediately (lets `contextmenu` event fire). If over empty canvas, starts panning. `contextmenu` is always `preventDefault()`'d.
