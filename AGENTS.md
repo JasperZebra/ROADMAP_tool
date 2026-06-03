@@ -205,6 +205,8 @@ The eraser size slider (`#erase-size`) ranges 4–800. `clearAllDrawings()` (�
 
 The link tool button is labeled **"Link/Unlink"** — clicking an existing link endpoint removes it; clicking a new pair creates one. The toolbar button text reflects both actions.
 
+`Select` and `Link/Unlink` are top-level toolbar buttons. **`Draw` and `Erase` live inside the `🎨 Canvas ▾` dropdown** (`#dd-canvas`), each followed by its controls: `brush-ui` (color, size slider, favorites 🎨, Clear) under Draw, and `erase-ui` (size slider, Clear) under Erase. Those control rows are shown/hidden by `setTool` toggling `.active` on `#brush-ui`/`#erase-ui`, so picking a tool reveals its controls beneath it. The dropdown does **not** `closeDD()` on tool select (so you can adjust the slider); it closes when you click the canvas. `setTool` also toggles `.active` on `#canvas-dd-btn` so the Canvas button stays highlighted while a draw/erase tool is active.
+
 - `setTool(t)` updates the active tool and adjusts brush UI visibility
 - WASD pan, scroll zoom, and right-click pan work regardless of active tool
 - Right-click on a node opens the context menu (not pan)

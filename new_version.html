@@ -193,6 +193,11 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 .dd-item.muted { opacity:0.35; pointer-events:none; }
 .dd-hint { margin-left:auto; color:#5c6068; font-size:10px; }
 .dd-sep { height:1px; background:#2e3035; margin:3px 4px; }
+.dd-item.active { background:#4752c4; color:#fff; }
+/* Tool controls live inside the Canvas dropdown — render full width under each tool */
+.dropdown-menu .brush-ui, .dropdown-menu .erase-ui { width:100%; margin:2px 0; box-sizing:border-box; }
+.dropdown-menu .brush-ui.active, .dropdown-menu .erase-ui.active { display:flex; }
+.dropdown-menu .brush-ui input[type="range"], .dropdown-menu .erase-ui input[type="range"] { flex:1; min-width:80px; }
 
 /* Dynamic Task List styling */
 .modal-tasks-container {
@@ -298,23 +303,28 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   <div class="tb-div"></div>
   <button class="btn" id="tool-select" onclick="setTool('select')">👆 Select</button>
   <button class="btn" id="tool-link" onclick="setTool('link')">🔗 Link/Unlink</button>
-  <button class="btn" id="tool-draw" onclick="setTool('draw')">🖍️ Draw</button>
-  <button class="btn" id="tool-erase" onclick="setTool('erase')">🧽 Erase</button>
-
-  <div class="brush-ui" id="brush-ui">
-    <input type="color" id="brush-color" value="#ffffff" title="Brush Color" oninput="syncShelfHighlight('brush')">
-    <span class="brush-label">Size:</span>
-    <input type="range" id="brush-size" min="4" max="800" value="18" title="Brush Size">
-    <button class="btn" id="btn-brush-palette" onclick="toggleBrushShelf(event)" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
-    <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
+  <!-- Canvas (draw / erase) dropdown — pick a tool, its controls render below it -->
+  <div class="dropdown">
+    <button class="btn" id="canvas-dd-btn" onclick="toggleDD('dd-canvas')">🎨 Canvas ▾</button>
+    <div class="dropdown-menu" id="dd-canvas">
+      <div class="dd-item" id="tool-draw" onclick="setTool('draw')">🖍️ Draw</div>
+      <div class="brush-ui" id="brush-ui">
+        <input type="color" id="brush-color" value="#ffffff" title="Brush Color" oninput="syncShelfHighlight('brush')">
+        <span class="brush-label">Size:</span>
+        <input type="range" id="brush-size" min="4" max="800" value="18" title="Brush Size">
+        <button class="btn" id="btn-brush-palette" onclick="toggleBrushShelf(event)" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
+        <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
+      </div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" id="tool-erase" onclick="setTool('erase')">🧽 Erase</div>
+      <div class="erase-ui" id="erase-ui">
+        <span class="brush-label">Eraser:</span>
+        <input type="range" id="erase-size" min="4" max="800" value="18" title="Eraser Size">
+        <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
+      </div>
+    </div>
   </div>
   <div class="color-shelf-pop" id="brush-shelf"></div>
-
-  <div class="erase-ui" id="erase-ui">
-    <span class="brush-label">Eraser:</span>
-    <input type="range" id="erase-size" min="4" max="800" value="18" title="Eraser Size">
-    <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
-  </div>
 
   <div class="tb-r">
     <button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" style="font-size:15px;padding:0 8px;">☀️</button>
@@ -677,6 +687,8 @@ function setTool(t) {
   
   document.getElementById('brush-ui').classList.toggle('active', t === 'draw');
   document.getElementById('erase-ui').classList.toggle('active', t === 'erase');
+  // Highlight the Canvas dropdown button while a draw/erase tool is active
+  document.getElementById('canvas-dd-btn').classList.toggle('active', t === 'draw' || t === 'erase');
   // Hide OS cursor when erasing so the preview circle is the cursor
   document.querySelector('canvas').style.cursor = t === 'erase' ? 'none' : '';
 }
