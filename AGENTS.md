@@ -189,7 +189,7 @@ This exists so the eraser's `globalCompositeOperation = 'destination-out'` only 
 
 > **Do not** draw strokes straight onto the main `ctx` again — that reintroduces the bug where erasing eats the group boxes and reveals the page background.
 
-The export function composites the rendered canvas onto a solid background to prevent transparent holes in exported images. **That background is theme-aware** — `exportImage` fills it with `tc('#2c2d31', '#dde1e7')` so exports match the chosen light/dark mode (the on-screen `.cw` canvas backgrounds). The on-screen eraser cursor gizmo is likewise themed: `tc('rgba(255,255,255,0.85)', 'rgba(0,0,0,0.7)')` (white in dark mode, black in light).
+The export function composites the rendered canvas onto a solid background to prevent transparent holes in exported images. **That background is theme-aware** — `exportImage` fills it with `tc('#2c2d31', '#dde1e7')` so exports match the chosen light/dark mode (the on-screen `.cw` canvas backgrounds). The on-screen cursor gizmo (a dashed preview circle shown for **both** the draw and erase tools, sized by the active tool's slider) is likewise themed: `tc('rgba(255,255,255,0.85)', 'rgba(0,0,0,0.7)')` (white in dark mode, black in light).
 
 The eraser size slider (`#erase-size`) ranges 4–800. `clearAllDrawings()` (🗑️ Clear button in both the brush and erase toolbars) confirms, then wipes `strokes` only — nodes, links, images and groups are kept — and calls `saveState()`.
 

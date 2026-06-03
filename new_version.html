@@ -1202,9 +1202,9 @@ function draw() {
 
   renderRemoteCursors();
 
-  // Eraser cursor preview circle
-  if (tool === 'erase') {
-    const sz = parseFloat(document.getElementById('erase-size').value);
+  // Brush / eraser cursor preview circle (sized by the active tool's slider)
+  if (tool === 'draw' || tool === 'erase') {
+    const sz = parseFloat(document.getElementById(tool === 'erase' ? 'erase-size' : 'brush-size').value);
     const r = sz * sc / 2;
     ctx.save();
     ctx.beginPath();
@@ -1489,8 +1489,8 @@ window.addEventListener('mousemove', e => {
     broadcastStateLive(); scheduleDraw(); return;
   }
 
-  // Keep eraser cursor circle moving even when not drawing
-  if (tool === 'erase') scheduleDraw();
+  // Keep the brush/eraser cursor circle moving even when not actively drawing
+  if (tool === 'draw' || tool === 'erase') scheduleDraw();
 });
 
 window.addEventListener('mouseup', e => {
