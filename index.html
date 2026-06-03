@@ -550,8 +550,12 @@ function render() {
     if (sortBy === 'nodes')   return (b[1].nodeCount || 0) - (a[1].nodeCount || 0);
     return (b[1].lastModified || 0) - (a[1].lastModified || 0);
   };
-  const pinned = entries.filter(([, p]) => p.pinned).sort(cmp);
-  const rest   = entries.filter(([, p]) => !p.pinned).sort(cmp);
+  // Three groups: shared Global Pins, this user's personal pins, then the rest.
+  // Global takes precedence so a project never appears in two sections.
+  const personal = getPersonalPins();
+  const globalP  = entries.filter(([, p]) => p.pinned).sort(cmp);
+  const mine     = entries.filter(([id, p]) => !p.pinned && personal.has(id)).sort(cmp);
+  const rest     = entries.filter(([id, p]) => !p.pinned && !personal.has(id)).sort(cmp);
 
   const container = document.getElementById('projects-container');
   container.className = 'projects-sections';
@@ -577,9 +581,11 @@ function render() {
     container.appendChild(grid);
   };
 
-  // Only show section headers when something is pinned; otherwise one clean list.
-  if (pinned.length) {
-    addSection('📌 Pinned', pinned);
+  // Show section headers only when something is pinned (global or personal);
+  // otherwise render one clean unlabeled list.
+  if (globalP.length || mine.length) {
+    addSection('🌐 Global Pins', globalP);
+    addSection('📌 My Pins', mine);
     addSection('All Projects', rest);
   } else {
     addSection(null, rest);
@@ -597,6 +603,7 @@ function makeCard(id, proj) {
 
   const completed  = !!proj.completed;
   const archived   = !!proj.archived;
+  const ppin       = isPersonalPinned(id);
   const lastEditBy = proj.lastEditedBy ? `· edited by ${esc(proj.lastEditedBy)}` : '';
 
   const el = document.createElement('div');
@@ -604,7 +611,7 @@ function makeCard(id, proj) {
   el.innerHTML = `
     ${completed ? '<div class="card-complete-star" title="Completed">⭐</div>' : ''}
     <div class="card-top">
-      <button class="card-pin-btn ${pinned?'pinned':''}" onclick="togglePin('${id}',${pinned})" title="${pinned?'Unpin':'Pin to top'}">📌</button>
+      <button class="card-pin-btn ${ppin?'pinned':''}" onclick="togglePersonalPin('${id}')" title="${ppin?'Unpin (personal)':'Pin (personal)'}">📌</button>
       <div class="card-spacer"></div>
       ${archived ? '<span class="archived-badge">Archived</span>' : ''}
       <div class="card-color-wrap">
@@ -616,6 +623,9 @@ function makeCard(id, proj) {
         <div class="dropdown-menu" id="dd-${id}">
           <div class="dd-item" onclick="startRename('${id}');closeDD()">✏️ Rename</div>
           <div class="dd-item" onclick="duplicateProject('${id}');closeDD()">⧉ Duplicate</div>
+          <div class="dd-sep"></div>
+          <div class="dd-item" onclick="togglePersonalPin('${id}');closeDD()">${ppin?'📌 Unpin (personal)':'📌 Pin (personal)'}</div>
+          <div class="dd-item" onclick="togglePin('${id}',${pinned});closeDD()">${pinned?'🌐 Unpin from Global':'🌐 Pin to Global'}</div>
           <div class="dd-sep"></div>
           <div class="dd-item" onclick="toggleComplete('${id}',${completed});closeDD()">${completed?'✅ Mark Incomplete':'⭐ Mark Complete'}</div>
           <div class="dd-item" onclick="toggleArchive('${id}',${archived});closeDD()">${archived?'📤 Unarchive':'📦 Archive'}</div>
@@ -644,6 +654,7 @@ function makeListRow(id, proj) {
   const pinned     = !!proj.pinned;
   const completed  = !!proj.completed;
   const archived   = !!proj.archived;
+  const ppin       = isPersonalPinned(id);
   const nodes      = proj.nodeCount || 0;
   const presence   = _allPresence[id] || {};
   const lastEditBy = proj.lastEditedBy ? `· ${esc(proj.lastEditedBy)}` : '';
@@ -664,12 +675,15 @@ function makeListRow(id, proj) {
     <div class="list-presence">${presHtml}</div>
     <div class="list-meta">${timeAgo(proj.lastModified)} ${lastEditBy}</div>
     <div class="list-actions">
-      <button class="btn icon" onclick="togglePin('${id}',${pinned})" title="${pinned?'Unpin':'Pin'}" style="font-size:13px;color:${pinned?'#f5a623':'#5c6068'}">📌</button>
+      <button class="btn icon" onclick="togglePersonalPin('${id}')" title="${ppin?'Unpin (personal)':'Pin (personal)'}" style="font-size:13px;color:${ppin?'#f5a623':'#5c6068'}">📌</button>
       <div class="dropdown">
         <button class="btn icon" onclick="toggleDD('ddl-${id}')" style="font-size:16px;">⋯</button>
         <div class="dropdown-menu" id="ddl-${id}">
           <div class="dd-item" onclick="startRename('${id}');closeDD()">✏️ Rename</div>
           <div class="dd-item" onclick="duplicateProject('${id}');closeDD()">⧉ Duplicate</div>
+          <div class="dd-sep"></div>
+          <div class="dd-item" onclick="togglePersonalPin('${id}');closeDD()">${ppin?'📌 Unpin (personal)':'📌 Pin (personal)'}</div>
+          <div class="dd-item" onclick="togglePin('${id}',${pinned});closeDD()">${pinned?'🌐 Unpin from Global':'🌐 Pin to Global'}</div>
           <div class="dd-sep"></div>
           <div class="dd-item" onclick="toggleComplete('${id}',${completed});closeDD()">${completed?'✅ Mark Incomplete':'⭐ Mark Complete'}</div>
           <div class="dd-item" onclick="toggleArchive('${id}',${archived});closeDD()">${archived?'📤 Unarchive':'📦 Archive'}</div>
@@ -743,8 +757,21 @@ function duplicateProject(id) {
   });
 }
 
+// Global pin — shared in Firebase, everyone sees it.
 function togglePin(id, currentlyPinned) {
   _db.ref('projects/' + id + '/pinned').set(!currentlyPinned).catch(() => {});
+}
+
+// Personal pins — per-user, stored locally (not shared, not synced across devices).
+function getPersonalPins() {
+  try { return new Set(JSON.parse(localStorage.getItem('rm_pinned') || '[]')); } catch { return new Set(); }
+}
+function isPersonalPinned(id) { return getPersonalPins().has(id); }
+function togglePersonalPin(id) {
+  const pins = getPersonalPins();
+  pins.has(id) ? pins.delete(id) : pins.add(id);
+  localStorage.setItem('rm_pinned', JSON.stringify([...pins]));
+  render();
 }
 function toggleComplete(id, currently) {
   _db.ref('projects/' + id + '/completed').set(!currently).catch(() => {});
@@ -850,6 +877,7 @@ function showProjCtxMenu(id, x, y) {
   const pinned    = !!proj.pinned;
   const completed = !!proj.completed;
   const archived  = !!proj.archived;
+  const ppin      = isPersonalPinned(id);
   const name      = esc(proj.name);
 
   const menu = document.getElementById('proj-ctx-menu');
@@ -857,7 +885,8 @@ function showProjCtxMenu(id, x, y) {
     <div class="dd-item" onclick="startRename('${id}');closeProjCtxMenu()">✏️ Rename</div>
     <div class="dd-item" onclick="duplicateProject('${id}');closeProjCtxMenu()">⧉ Duplicate</div>
     <div class="dd-sep"></div>
-    <div class="dd-item" onclick="togglePin('${id}',${pinned});closeProjCtxMenu()">${pinned?'📌 Unpin':'📌 Pin to Top'}</div>
+    <div class="dd-item" onclick="togglePersonalPin('${id}');closeProjCtxMenu()">${ppin?'📌 Unpin (personal)':'📌 Pin (personal)'}</div>
+    <div class="dd-item" onclick="togglePin('${id}',${pinned});closeProjCtxMenu()">${pinned?'🌐 Unpin from Global':'🌐 Pin to Global'}</div>
     <div class="dd-item" onclick="toggleComplete('${id}',${completed});closeProjCtxMenu()">${completed?'✅ Mark Incomplete':'⭐ Mark Complete'}</div>
     <div class="dd-item" onclick="toggleArchive('${id}',${archived});closeProjCtxMenu()">${archived?'📤 Unarchive':'📦 Archive'}</div>
     <div class="dd-sep"></div>

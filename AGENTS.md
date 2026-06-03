@@ -214,7 +214,7 @@ The link tool button is labeled **"Link/Unlink"** — clicking an existing link 
 The zoom +/− buttons and the `%` label were removed from the toolbar. Zoom is now **scroll-wheel only** (still multiplicative; `zB()` and the `#zl` label no longer exist).
 
 ### Edit Node Modal — Image
-The node edit modal (`#modal-overlay`) has an **Image** section: a 72×72 preview (`#edit-img-preview`), an "Add / Change" button (triggers hidden `#edit-img-file`), and a "Remove" button. The change is **staged** in `_editImgStaged` (`undefined` = unchanged, a dataURL = new image, `''` = removed) and applied to `_et.img` only in `commitEdit`, so Cancel discards it. The toolbar "Set Node Image" path still exists and applies immediately. The `.modal` is `max-height:90vh; overflow-y:auto` so it scrolls on short screens.
+The node edit modal (`#modal-overlay`) has an **Image** section: a large full-width preview (`#edit-img-preview`, `max-height:220px`, `object-fit:contain` so the whole image shows) above an "Add / Change" button (triggers hidden `#edit-img-file`) and a "Remove" button. The change is **staged** in `_editImgStaged` (`undefined` = unchanged, a dataURL = new image, `''` = removed) and applied to `_et.img` only in `commitEdit`, so Cancel discards it. The toolbar "Set Node Image" path still exists and applies immediately. The `.modal` is `max-height:90vh; overflow-y:auto` so it scrolls on short screens.
 
 - `setTool(t)` updates the active tool and adjusts brush UI visibility. It also sets the canvas cursor per tool (`toolCursors` map): `none` for erase (the preview circle is the cursor), `ew-resize` (↔) for link so users know they're linking, default otherwise.
 - WASD pan, scroll zoom, and right-click pan work regardless of active tool
@@ -308,7 +308,11 @@ let searchQuery = '';
 Both `sortBy` and `viewMode` are persisted in `localStorage`.
 
 ### Project Card Features
-- **Pin**: stored in Firebase. Pinned projects render in their **own "📌 Pinned" section above** an "All Projects" section (see `render()` — it splits `entries` into `pinned`/`rest`, sorts each by the current `sortBy`, and appends sectioned grids/lists into `#projects-container`, now classed `projects-sections`). Section headers only appear when something is pinned.
+- **Pin (two kinds)**:
+  - **Global pin** — shared, stored in Firebase `projects/{id}/pinned` via `togglePin(id, cur)`. Everyone sees it; drives the gold card/row border (`.pinned` class) and the **🌐 Global Pins** section.
+  - **Personal pin** — per-user, stored locally in `localStorage['rm_pinned']` (array of project IDs) via `togglePersonalPin(id)` / `getPersonalPins()` / `isPersonalPinned(id)`. Not shared, not synced across devices. Drives the **📌 My Pins** section and the gold ⋯-row 📌 button highlight.
+  - The quick 📌 button (card + list row) toggles the **personal** pin; the ⋯ menu and right-click context menu offer **both** "📌 Pin (personal)" and "🌐 Pin to Global".
+  - `render()` splits filtered `entries` into `globalP` / `mine` (personal & not global) / `rest`, sorts each by the current `sortBy`, and appends sectioned grids/lists into `#projects-container` (classed `projects-sections`). Section headers appear only when something is pinned (global or personal); otherwise one unlabeled list. Global takes precedence so a project never appears in two sections.
 - **Complete**: shows ⭐ badge, gold border
 - **Archive**: hidden by default, shown with "Show Archived" toggle, appears dimmed
 - **Color**: accent dot + color picker, updates Firebase immediately
