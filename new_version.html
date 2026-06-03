@@ -2277,22 +2277,68 @@ function updatePresenceBar() {
   });
 }
 
-// Committed save — no sender tag so it always reloads for everyone including yourself
-function serializeState() {
+// ── Image extraction (bandwidth) ─────────────────────────
+// Base64 images are stored OUT of /state, in /rooms/{id}/images/{key} (key = n_<nodeId>
+// for node images, f_<frameId> for image frames). They're written once and fetched
+// once (cached), so editing a node only re-sends the small text/coordinate state —
+// not every image. `_remoteImages` mirrors what's in the DB; `_imgUploaded` tracks
+// what we've already pushed so we don't re-upload unchanged images.
+let _remoteImages = {};
+let _imgUploaded = {};
+const _NODE_DERIVED = ['titleLines','descLines','catLines','_textKey','catY','catH','titleY','titleH','imgY','imgH','contentY','contentH','h'];
+function _cleanNodeForDB(n) {
+  const c = Object.assign({}, n, { selected: false });
+  delete c.img;                          // image lives in /images, not /state
+  _NODE_DERIVED.forEach(k => delete c[k]); // recomputed on load; no need to sync
+  return c;
+}
+
+// State written to Firebase — images and derived render fields stripped out.
+function serializeStateForDB() {
   return {
-    nodes: nodes.map(n => Object.assign({}, n, { selected: false })),
+    nodes: nodes.map(_cleanNodeForDB),
     links,
     strokes,
-    canvasImages: canvasImages.map(img => Object.assign({}, img, { selected: false })),
+    canvasImages: canvasImages.map(img => { const c = Object.assign({}, img, { selected: false }); delete c.src; return c; }),
     groups: groups.map(g => Object.assign({}, g, { selected: false })),
     _id,
     favoriteColors
   };
 }
+function serializeStateForDBLive() {
+  return Object.assign(serializeStateForDB(), { _sender: myUser.id });
+}
 
-// Live mid-action save — tagged with sender so the sender's own listener ignores the bounce-back
-function serializeStateLive() {
-  return Object.assign(serializeState(), { _sender: myUser.id });
+// Upload only new/changed images, remove images for deleted nodes/frames.
+function syncImages() {
+  if (!_db) return;
+  const want = {};
+  nodes.forEach(n => { if (n.img) want['n_' + n.id] = n.img; });
+  canvasImages.forEach(im => { if (im.src) want['f_' + im.id] = im.src; });
+  Object.entries(want).forEach(([k, url]) => {
+    if (_imgUploaded[k] !== url) {
+      _imgUploaded[k] = url;
+      _db.ref('rooms/' + roomId + '/images/' + k).set(url).catch(() => {});
+    }
+  });
+  Object.keys(_imgUploaded).forEach(k => {
+    if (!(k in want)) {
+      delete _imgUploaded[k];
+      _db.ref('rooms/' + roomId + '/images/' + k).remove().catch(() => {});
+    }
+  });
+}
+
+// Attach a fetched (or removed) image to its owning node / frame.
+function applyRemoteImage(key, url) {
+  if (key.indexOf('n_') === 0) {
+    const id = key.slice(2);
+    const n = nodes.find(x => String(x.id) === id);
+    if (n) { n.img = url || undefined; updateNodeText(n); }
+  } else if (key.indexOf('f_') === 0) {
+    const im = canvasImages.find(x => x.id === key.slice(2));
+    if (im) im.src = url || undefined;
+  }
 }
 
 // ── Site-wide user registry (roster on the projects page) ─
@@ -2325,7 +2371,8 @@ function broadcastState() {
   if (!_db) return;
   clearTimeout(_broadcastTimer);
   _broadcastTimer = setTimeout(() => {
-    _db.ref('rooms/' + roomId + '/state').set(serializeState()).catch(() => {});
+    syncImages(); // push only new/changed images (write-once), clean up deleted ones
+    _db.ref('rooms/' + roomId + '/state').set(serializeStateForDB()).catch(() => {});
     _db.ref('projects/' + roomId + '/lastModified').set(Date.now()).catch(() => {});
     _db.ref('projects/' + roomId + '/nodeCount').set(nodes.length).catch(() => {});
     _db.ref('projects/' + roomId + '/lastEditedBy').set(myUser.name).catch(() => {});
@@ -2343,7 +2390,7 @@ function broadcastStateLive() {
   const now = Date.now();
   if (now - _liveBroadcastMs < 50) return;
   _liveBroadcastMs = now;
-  _db.ref('rooms/' + roomId + '/state').set(serializeStateLive()).catch(() => {});
+  _db.ref('rooms/' + roomId + '/state').set(serializeStateForDBLive()).catch(() => {});
 }
 
 
@@ -2405,6 +2452,10 @@ function startFirebase() {
       const data = snap.val();
       if (!data) { broadcastState(); if (!_historySeeded) seedHistory(); return; }
       if (data._sender && data._sender === myUser.id) return;
+      // Remember images we already have so they don't blink while /images resolves.
+      const prevNodeImg = {}, prevFrameSrc = {};
+      nodes.forEach(n => { if (n.img) prevNodeImg['n_' + n.id] = n.img; });
+      canvasImages.forEach(im => { if (im.src) prevFrameSrc['f_' + im.id] = im.src; });
       nodes        = data.nodes        || [];
       links        = data.links        || [];
       strokes      = data.strokes      || [];
@@ -2412,13 +2463,44 @@ function startFirebase() {
       groups       = data.groups       || [];
       _id          = data._id          || 1;
       if (data.favoriteColors && data.favoriteColors.length) favoriteColors = data.favoriteColors;
-      nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
-      canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
+      // Resolve images. Precedence: embedded img (old pre-split projects, where it's
+      // still in /state) → /images store (new format, authoritative) → previously
+      // known image (anti-flash while /images is still loading).
+      nodes.forEach(n => {
+        n.img = n.img || _remoteImages['n_' + n.id] || prevNodeImg['n_' + n.id];
+        updateNodeText(n);
+        if (n.img) cacheImage(n.img);
+      });
+      canvasImages.forEach(im => {
+        im.src = im.src || _remoteImages['f_' + im.id] || prevFrameSrc['f_' + im.id];
+        if (im.src) cacheImage(im.src);
+      });
       renderFavColors();
       scheduleDraw();
       // Capture the first synced state as the undo baseline (once).
       if (!_historySeeded) seedHistory();
     } catch(e) { console.error('Failed to apply remote state:', e); }
+  });
+
+  // Image sync — each image fetched once (child_added), updated/removed as needed.
+  // Avoids re-downloading images on every text/position edit.
+  const imgRef = _db.ref('rooms/' + roomId + '/images');
+  const onImg = snap => {
+    const key = snap.key, url = snap.val();
+    if (url == null) return;
+    _remoteImages[key] = url;
+    _imgUploaded[key] = url; // it's already in the DB — don't re-upload it
+    cacheImage(url);
+    applyRemoteImage(key, url);
+    scheduleDraw();
+  };
+  imgRef.on('child_added', onImg);
+  imgRef.on('child_changed', onImg);
+  imgRef.on('child_removed', snap => {
+    delete _remoteImages[snap.key];
+    delete _imgUploaded[snap.key];
+    applyRemoteImage(snap.key, undefined);
+    scheduleDraw();
   });
 
   // User presence (join / leave)

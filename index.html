@@ -863,9 +863,12 @@ function duplicateProject(id) {
   const meta = Object.assign({}, src, { name: src.name + ' (copy)', created: now, lastModified: now, createdBy: myUser.name });
 
   _db.ref('projects/' + newId).set(meta).then(() => {
-    // Copy canvas state if it exists
+    // Copy canvas state + images (state and images are separate nodes now)
     _db.ref('rooms/' + id + '/state').once('value', snap => {
       if (snap.val()) _db.ref('rooms/' + newId + '/state').set(snap.val());
+    });
+    _db.ref('rooms/' + id + '/images').once('value', snap => {
+      if (snap.val()) _db.ref('rooms/' + newId + '/images').set(snap.val());
     });
   });
 }

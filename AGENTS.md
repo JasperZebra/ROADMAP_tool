@@ -107,12 +107,15 @@ const FIREBASE_CONFIG = {
 /rooms/
   {projectId}/
     state/
-      nodes:        array
+      nodes:        array  (node images stripped — see /images; derived render fields stripped too)
       links:        array
       strokes:      array
-      canvasImages: array
+      canvasImages: array  (image `src` stripped — see /images)
       _id:          number (next node ID counter)
       _sender:      string | undefined (only present on live mid-drag broadcasts)
+    images/
+      n_{nodeId}:   string (base64 data URL for a node image)
+      f_{frameId}:  string (base64 data URL for an image frame)
     cursors/
       {userId}/
         wx: number (world x)
@@ -139,7 +142,13 @@ RTDB "Downloads" usage = bytes sent to listeners; a `.on('value')` re-downloads 
 1. **`index.html` must never listen to `/rooms`.** That tree holds every project's full canvas `state` (incl. base64 images) and `cursors`; watching it re-downloaded everything on every cursor tick. The projects page now watches only `/presence` (names/colors), `/projects` (metadata, no images), and `/users` (roster) — all image-free.
 2. **Presence is a top-level `/presence/{roomId}/{userId}` node, deliberately separate from `/rooms`** so the projects page can show "who's here" dots without pulling canvas state. Written/cleared by `new_version.html` (`onDisconnect().remove()`); deleting a project also removes `/presence/{id}`.
 
-Still-open opportunities if egress is high: base64 images live inside `/rooms/{id}/state`, so any edit re-sends them to everyone in that room (and to the editor's own listener). Biggest future win is moving images to Firebase Storage and storing only URLs, or splitting images into a sub-node so text/position edits don't re-download them.
+3. **Images live in `/rooms/{id}/images`, NOT in `/state`.** `/state` is rewritten on every edit, so keeping base64 images out of it means editing a node only re-sends small text/coordinate data — not every image.
+   - `serializeStateForDB()` strips `img` (nodes) / `src` (frames) **and** derived render fields (`titleLines`, `catY`, `h`, …) before writing `/state`. (The local `serializeForStore()` for localStorage/undo keeps images — local, no bandwidth cost.)
+   - `syncImages()` (called in `broadcastState`) uploads only **new/changed** images to `/rooms/{id}/images/{key}` (key `n_<nodeId>` / `f_<frameId>`), tracked by `_imgUploaded` so unchanged images aren't re-sent; removes images for deleted nodes/frames.
+   - A `child_added`/`child_changed`/`child_removed` listener on `/images` fetches each image **once** into `_remoteImages` and `applyRemoteImage()` attaches it to its node/frame. The `/state` listener resolves images as `embedded || _remoteImages || previous` (anti-flash).
+   - **Back-compat:** old projects with images embedded in `/state` still render; they auto-migrate to `/images` on the first save. `duplicateProject` (index.html) copies both `/state` and `/images`. Deleting a project removes all of `/rooms/{id}` incl. images.
+
+Remaining lever if still high: editing one node still re-sends *all* nodes' (now small, image-free) metadata. True per-node granularity (keyed map + `child_*`) or Firebase Storage URLs instead of base64 would go further.
 
 ### Site-wide User Roster (`/users`)
 
