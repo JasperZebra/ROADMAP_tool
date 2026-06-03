@@ -313,7 +313,6 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
         <span class="brush-label">Size:</span>
         <input type="range" id="brush-size" min="4" max="800" value="18" title="Brush Size">
         <button class="btn" id="btn-brush-palette" onclick="toggleBrushShelf(event)" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
-        <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
       </div>
       <div class="dd-sep"></div>
       <div class="dd-item" id="tool-erase" onclick="setTool('erase')">🧽 Erase</div>
@@ -321,6 +320,12 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
         <span class="brush-label">Eraser:</span>
         <input type="range" id="erase-size" min="4" max="800" value="18" title="Eraser Size">
         <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
+      </div>
+      <div class="dd-sep"></div>
+      <div class="brush-ui" id="canvas-bg-ui">
+        <span class="brush-label">Background:</span>
+        <input type="color" id="canvas-bg-color" title="Canvas background color" oninput="setCanvasBg(this.value)">
+        <button class="btn" onclick="resetCanvasBg()" title="Reset to theme default" style="height:26px;padding:0 8px;font-size:13px;margin-left:auto;">Reset</button>
       </div>
     </div>
   </div>
@@ -1959,7 +1964,7 @@ function exportImage(format) {
   baseCanvas.width = oc.width; baseCanvas.height = oc.height;
   const baseCtx = baseCanvas.getContext('2d');
   
-  baseCtx.fillStyle = tc('#2c2d31', '#dde1e7'); // match the active light/dark canvas background
+  baseCtx.fillStyle = localStorage.getItem('rm_canvas_bg') || tc('#2c2d31', '#dde1e7'); // custom bg, else the active theme background
   baseCtx.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
   baseCtx.drawImage(oc, 0, 0);
   
@@ -2356,12 +2361,33 @@ function applyTheme(t) {
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.textContent = t === 'light' ? '🌙' : '☀️';
   localStorage.setItem('rm_theme', t);
+  applyCanvasBg(); // re-apply custom bg (or sync picker to the new theme default)
   if (W > 0) scheduleDraw();
 }
 function toggleTheme() {
   applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
 }
+
+// ── Canvas background (per-user, local) ──────────────────
+// Stored in localStorage as 'rm_canvas_bg'. When set it overrides the theme's
+// default canvas color in both themes; Reset clears it and reverts to the theme.
+function applyCanvasBg() {
+  const bg = localStorage.getItem('rm_canvas_bg');
+  const picker = document.getElementById('canvas-bg-color');
+  wrap.style.background = bg || ''; // '' lets the CSS theme default show through
+  if (picker) picker.value = bg || tc('#2c2d31', '#dde1e7');
+}
+function setCanvasBg(color) {
+  localStorage.setItem('rm_canvas_bg', color);
+  applyCanvasBg();
+}
+function resetCanvasBg() {
+  localStorage.removeItem('rm_canvas_bg');
+  applyCanvasBg();
+}
+
 applyTheme(localStorage.getItem('rm_theme') || 'dark');
+applyCanvasBg();
 
 // Boot: redirect to projects if no project ID, else start session
 (function boot() {
