@@ -1300,6 +1300,24 @@ let _dn = null, _isDrag = false, _dragGroup = [];
 let _panning = false, _panStart = {x:0,y:0}, _panOrig = {px:0,py:0};
 let _tempLink = null, _linkStartNode = null;
 let _drawing = false, _curStroke = null;
+
+// Shrink a finished stroke before it's stored/synced: round points to 0.1 world
+// units and drop points that barely moved. Cuts stroke payload (strokes ride along
+// in /state on every edit) with no visible quality change.
+function simplifyStroke(s) {
+  if (!s || !s.points || s.points.length < 2) return;
+  const minD2 = 0.25; // ~0.5px world; collapse points closer than this
+  const r = v => Math.round(v * 10) / 10;
+  const out = [{ x: r(s.points[0].x), y: r(s.points[0].y) }];
+  for (let i = 1; i < s.points.length; i++) {
+    const x = r(s.points[i].x), y = r(s.points[i].y);
+    const last = out[out.length - 1];
+    const dx = x - last.x, dy = y - last.y;
+    // always keep the final point so the stroke ends where the user lifted
+    if (dx*dx + dy*dy >= minD2 || i === s.points.length - 1) out.push({ x, y });
+  }
+  s.points = out;
+}
 let _selBoxStart = null, _selBox = null;
 let _clipboard = [];
 let _mouseWorld = { x: 0, y: 0 };
@@ -1546,7 +1564,7 @@ window.addEventListener('mousemove', e => {
 
 window.addEventListener('mouseup', e => {
   if (e.button === 2) { _panning = false; wrap.style.cursor = 'default'; }
-  if (_drawing) { _drawing = false; _curStroke = null; saveState(); }
+  if (_drawing) { _drawing = false; if (_curStroke) simplifyStroke(_curStroke); _curStroke = null; saveState(); }
   if (_activeImg) { _activeImg = null; _imgMode = null; saveState(); }
   if (_activeGroup) { _activeGroup = null; _groupMode = null; saveState(); }
   
@@ -1959,9 +1977,36 @@ function decodeDDSToCanvas(buf) {
   return cv;
 }
 
-// Unified image reader: decodes .dds to a PNG data URL, otherwise reads the file
-// directly as a data URL. Calls cb(dataURL).
+// Downscale (cap longest side ~1024px) and re-encode to shrink an image before it
+// goes into state/Firebase. Alpha-aware: keeps PNG when the image has transparency,
+// uses JPEG otherwise. Never returns something larger than the input.
+function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85) {
+  const img = new Image();
+  img.onload = () => {
+    const w = img.width, h = img.height;
+    if (!w || !h) { cb(dataURL); return; }
+    const scale = Math.min(1, maxDim / Math.max(w, h));
+    const tw = Math.max(1, Math.round(w * scale)), th = Math.max(1, Math.round(h * scale));
+    const c = document.createElement('canvas');
+    c.width = tw; c.height = th;
+    const cx = c.getContext('2d');
+    cx.drawImage(img, 0, 0, tw, th);
+    let hasAlpha = false;
+    try {
+      const d = cx.getImageData(0, 0, tw, th).data;
+      for (let i = 3; i < d.length; i += 4) { if (d[i] < 255) { hasAlpha = true; break; } }
+    } catch (e) { hasAlpha = true; } // be safe if pixels can't be read
+    const out = hasAlpha ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', quality);
+    cb(out.length < dataURL.length ? out : dataURL); // never make it bigger
+  };
+  img.onerror = () => cb(dataURL);
+  img.src = dataURL;
+}
+
+// Unified image reader: decodes .dds to a PNG, otherwise reads the file as a data
+// URL — then compresses before handing back the data URL via cb(dataURL).
 function readImageFile(file, cb) {
+  const finish = dataURL => compressImage(dataURL, cb);
   const isDDS = /\.dds$/i.test(file.name) || /dds/i.test(file.type || '');
   const reader = new FileReader();
   if (isDDS) {
@@ -1969,12 +2014,12 @@ function readImageFile(file, cb) {
       try {
         const cv = decodeDDSToCanvas(ev.target.result);
         if (!cv) { alert("Unsupported DDS format. Supported: DXT1/DXT3/DXT5 and uncompressed DDS (not BC7). Try re-exporting as PNG or one of those."); return; }
-        cb(cv.toDataURL('image/png'));
+        finish(cv.toDataURL('image/png'));
       } catch (err) { console.error('DDS decode failed:', err); alert('Could not read this DDS file.'); }
     };
     reader.readAsArrayBuffer(file);
   } else {
-    reader.onload = ev => cb(ev.target.result);
+    reader.onload = ev => finish(ev.target.result);
     reader.readAsDataURL(file);
   }
 }

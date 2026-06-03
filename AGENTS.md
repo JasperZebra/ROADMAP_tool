@@ -148,6 +148,9 @@ RTDB "Downloads" usage = bytes sent to listeners; a `.on('value')` re-downloads 
    - A `child_added`/`child_changed`/`child_removed` listener on `/images` fetches each image **once** into `_remoteImages` and `applyRemoteImage()` attaches it to its node/frame. The `/state` listener resolves images as `embedded || _remoteImages || previous` (anti-flash).
    - **Back-compat:** old projects with images embedded in `/state` still render; they auto-migrate to `/images` on the first save. `duplicateProject` (index.html) copies both `/state` and `/images`. Deleting a project removes all of `/rooms/{id}` incl. images.
 
+4. **Strokes are shrunk on finish** — `simplifyStroke()` (called on draw mouseup) rounds points to 0.1 world units and drops points that barely moved. Strokes ride along in `/state` on every edit, so smaller strokes mean smaller broadcasts.
+5. **Images are compressed on upload** (see `compressImage`, capped ~1024px) so they're small both in storage and when fetched.
+
 Remaining lever if still high: editing one node still re-sends *all* nodes' (now small, image-free) metadata. True per-node granularity (keyed map + `child_*`) or Firebase Storage URLs instead of base64 would go further.
 
 ### Site-wide User Roster (`/users`)
@@ -394,7 +397,7 @@ Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`
 ### 3. Image uploads are base64 in state
 Node images and standalone image frames are stored as base64 data URLs inside the state JSON. Large images will make Firebase writes slow. No CDN/storage is used — everything is embedded.
 
-All three image inputs (node-image edit modal, toolbar "Set Node Image" `#fi-img`, canvas "Image Frame" `#fi-canvas-img`) go through **`readImageFile(file, cb)`**. For normal images it reads a data URL; for **`.dds`** it runs the built-in decoder (`decodeDDSToCanvas`) and converts to a **PNG data URL**, so the rest of the app (cache/render/persist) is unchanged. Supported DDS formats: **DXT1/BC1, DXT3/BC2, DXT5/BC3, and uncompressed RGB/RGBA** (incl. DX10-header BC1–3). **BC4/BC5/BC7 are not supported** — those alert the user to re-export. The decoder is pure JS (no deps); `accept="image/*,.dds"` on the inputs.
+All three image inputs (node-image edit modal, toolbar "Set Node Image" `#fi-img`, canvas "Image Frame" `#fi-canvas-img`) go through **`readImageFile(file, cb)`**, which also runs **`compressImage()`**: downscales to a max ~1024px longest side and re-encodes (PNG when the image has transparency, else JPEG q0.85), never returning something larger than the input. So a multi-MB photo is stored as tens of KB. This is lossy/irreversible (the original isn't kept). For normal images it reads a data URL; for **`.dds`** it runs the built-in decoder (`decodeDDSToCanvas`) and converts to a **PNG data URL**, so the rest of the app (cache/render/persist) is unchanged. Supported DDS formats: **DXT1/BC1, DXT3/BC2, DXT5/BC3, and uncompressed RGB/RGBA** (incl. DX10-header BC1–3). **BC4/BC5/BC7 are not supported** — those alert the user to re-export. The decoder is pure JS (no deps); `accept="image/*,.dds"` on the inputs.
 
 ### 4. The eraser punches transparent holes
 Eraser strokes use `destination-out` compositing, but only on the **isolated stroke layer** (see "Stroke Layer Isolation") — never on the main canvas. The canvas background color is only painted during export (via a base canvas layer). On-screen, the canvas element is transparent and the CSS `background` of `.cw` shows through erased areas.
