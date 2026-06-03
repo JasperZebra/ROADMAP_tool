@@ -613,6 +613,8 @@ function loadState(stateStr) {
   
   if (d.favoriteColors && d.favoriteColors.length) favoriteColors = d.favoriteColors;
   groups = d.groups || [];
+  // Ensure strokes carry a stable id + draw-order timestamp (older saves/JSON lack them).
+  strokes.forEach((s, i) => { _strokeId(s); if (s.t == null) s.t = i; });
   nodes.forEach(n => { updateNodeText(n); if (n.img && !imgCache[n.img]) cacheImage(n.img); });
   canvasImages.forEach(img => { if (img.src && !imgCache[img.src]) cacheImage(img.src); });
   renderFavColors();
@@ -1356,6 +1358,8 @@ cv.addEventListener('mousedown', e => {
     _drawing = true;
     const _isEraser = tool === 'erase';
     _curStroke = {
+      id: 'k' + Math.random().toString(36).slice(2, 10), // stable per-stroke key
+      t: Date.now(),                                      // draw order
       points: [sw(p.x, p.y)],
       color: document.getElementById('brush-color').value,
       width: _isEraser ? parseFloat(document.getElementById('erase-size').value) : parseFloat(document.getElementById('brush-size').value),
@@ -2338,20 +2342,148 @@ function _cleanNodeForDB(n) {
   return c;
 }
 
-// State written to Firebase — images and derived render fields stripped out.
-function serializeStateForDB() {
-  return {
-    nodes: nodes.map(_cleanNodeForDB),
-    links,
-    strokes,
-    canvasImages: canvasImages.map(img => { const c = Object.assign({}, img, { selected: false }); delete c.src; return c; }),
-    groups: groups.map(g => Object.assign({}, g, { selected: false })),
-    _id,
-    favoriteColors
+// ── Per-entity sync ──────────────────────────────────────
+// Each node/stroke/frame/group is its own child under /rooms/{id} (paths: nodes,
+// strokes, frames, groups), plus whole-value `links` and `meta`. Editing one node
+// only writes (and others only download) that node — not the whole board.
+// `_sync` holds the JSON we last saw/wrote per key, used to (a) diff so we push
+// only changes and (b) ignore our own echoes and no-op remote updates.
+let _sync = { nodes: {}, strokes: {}, frames: {}, groups: {}, links: null, meta: null };
+// path -> timestamp of our last write to it. Used to ignore our OWN echoes (incl.
+// stale ones that arrive after a newer live-drag write, which would otherwise make
+// the entity jitter/revert mid-drag).
+let _selfWrites = {};
+
+function _strokeId(s) { if (!s.id) s.id = 'k' + Math.random().toString(36).slice(2, 10); return s.id; }
+function _cleanFrameForDB(im) { const c = Object.assign({}, im, { selected: false }); delete c.src; return c; }
+function _cleanGroupForDB(g) { return Object.assign({}, g, { selected: false }); }
+
+// Diff in-memory state against _sync; write only what changed via one multi-path update.
+function pushDiff() {
+  if (!_db) return;
+  const updates = {};
+  const diff = (arr, keyFn, cleanFn, path) => {
+    const cur = {};
+    arr.forEach(item => {
+      const key = keyFn(item);
+      const js = JSON.stringify(cleanFn(item));
+      cur[key] = js;
+      if (_sync[path][key] !== js) updates[path + '/' + key] = JSON.parse(js);
+    });
+    Object.keys(_sync[path]).forEach(key => { if (!(key in cur)) updates[path + '/' + key] = null; });
+    _sync[path] = cur;
   };
+  diff(nodes,        n  => 'n' + n.id, _cleanNodeForDB,  'nodes');
+  diff(strokes,      s  => _strokeId(s), s => s,         'strokes');
+  diff(canvasImages, im => im.id,      _cleanFrameForDB, 'frames');
+  diff(groups,       g  => g.id,       _cleanGroupForDB, 'groups');
+  const linksJs = JSON.stringify(links);
+  if (_sync.links !== linksJs) { updates['links'] = links; _sync.links = linksJs; }
+  const meta = { _id, fav: favoriteColors };
+  const metaJs = JSON.stringify(meta);
+  if (_sync.meta !== metaJs) { updates['meta'] = meta; _sync.meta = metaJs; }
+  const keys = Object.keys(updates);
+  if (!keys.length) return;
+  const now = Date.now();
+  keys.forEach(p => { if (updates[p] !== null) _selfWrites[p] = now; });
+  _db.ref('rooms/' + roomId).update(updates).catch(() => {});
 }
-function serializeStateForDBLive() {
-  return Object.assign(serializeStateForDB(), { _sender: myUser.id });
+
+// Apply a single remote entity into the in-memory arrays (preserving local-only
+// fields like selection, and resolving images from the /images store).
+function applyRemoteNode(d) {
+  if (d.id == null) return;
+  const i = nodes.findIndex(x => x.id === d.id);
+  d.selected = i >= 0 ? nodes[i].selected : false;
+  d.img = _remoteImages['n_' + d.id] || (i >= 0 ? nodes[i].img : undefined);
+  if (i >= 0) nodes[i] = d; else nodes.push(d);
+  updateNodeText(d); if (d.img) cacheImage(d.img);
+  nodes.sort((a, b) => a.id - b.id);
+}
+function applyRemoteStroke(d) {
+  if (!d.id) return;
+  const i = strokes.findIndex(s => s.id === d.id);
+  if (i >= 0) strokes[i] = d; else strokes.push(d);
+  strokes.sort((a, b) => (a.t || 0) - (b.t || 0) || ('' + a.id).localeCompare('' + b.id));
+}
+function applyRemoteFrame(d) {
+  if (!d.id) return;
+  const i = canvasImages.findIndex(x => x.id === d.id);
+  d.selected = i >= 0 ? canvasImages[i].selected : false;
+  d.src = _remoteImages['f_' + d.id] || (i >= 0 ? canvasImages[i].src : undefined);
+  if (i >= 0) canvasImages[i] = d; else canvasImages.push(d);
+  if (d.src) cacheImage(d.src);
+}
+function applyRemoteGroup(d) {
+  if (!d.id) return;
+  const i = groups.findIndex(x => x.id === d.id);
+  d.selected = i >= 0 ? groups[i].selected : false;
+  if (i >= 0) groups[i] = d; else groups.push(d);
+}
+
+// Rebuild all arrays from a full room snapshot (the one-time read on open).
+function rebuildFromRoom(room) {
+  nodes        = Object.values(room.nodes  || {});
+  strokes      = Object.values(room.strokes || {});
+  canvasImages = Object.values(room.frames || {});
+  groups       = Object.values(room.groups || {});
+  links        = room.links || [];
+  if (room.meta && room.meta._id != null) _id = room.meta._id;
+  if (room.meta && room.meta.fav && room.meta.fav.length) favoriteColors = room.meta.fav;
+  _sync = { nodes: {}, strokes: {}, frames: {}, groups: {}, links: JSON.stringify(links), meta: JSON.stringify({ _id, fav: favoriteColors }) };
+  nodes.forEach(n => { _sync.nodes['n' + n.id] = JSON.stringify(_cleanNodeForDB(n)); n.img = _remoteImages['n_' + n.id] || n.img; updateNodeText(n); if (n.img) cacheImage(n.img); });
+  strokes.forEach(s => { _strokeId(s); _sync.strokes[s.id] = JSON.stringify(s); });
+  strokes.sort((a, b) => (a.t || 0) - (b.t || 0) || ('' + a.id).localeCompare('' + b.id));
+  canvasImages.forEach(im => { _sync.frames[im.id] = JSON.stringify(_cleanFrameForDB(im)); im.src = _remoteImages['f_' + im.id] || im.src; if (im.src) cacheImage(im.src); });
+  groups.forEach(g => { _sync.groups[g.id] = JSON.stringify(_cleanGroupForDB(g)); });
+  nodes.sort((a, b) => a.id - b.id);
+  renderFavColors(); scheduleDraw();
+}
+
+// Load a legacy single-blob /state object into memory (used to migrate old projects).
+function applyLegacyState(d) {
+  nodes = d.nodes || []; links = d.links || []; strokes = d.strokes || [];
+  canvasImages = d.canvasImages || []; groups = d.groups || []; _id = d._id || 1;
+  if (d.favoriteColors && d.favoriteColors.length) favoriteColors = d.favoriteColors;
+  strokes.forEach((s, i) => { _strokeId(s); if (s.t == null) s.t = i; });
+  nodes.forEach(n => { n.img = n.img || _remoteImages['n_' + n.id]; updateNodeText(n); if (n.img) cacheImage(n.img); });
+  canvasImages.forEach(im => { im.src = im.src || _remoteImages['f_' + im.id]; if (im.src) cacheImage(im.src); });
+  renderFavColors(); scheduleDraw();
+}
+
+// Per-child listeners for incremental deltas after the initial full read.
+function attachEntityListeners() {
+  const base = _db.ref('rooms/' + roomId);
+  const onEntity = (coll, apply) => snap => {
+    const key = snap.key, val = snap.val();
+    if (val == null) return;
+    const full = coll + '/' + key;
+    if (_selfWrites[full] && Date.now() - _selfWrites[full] < 2000) return; // our own (possibly stale) echo
+    const js = JSON.stringify(val);
+    if (_sync[coll][key] === js) return; // unchanged
+    _sync[coll][key] = js;
+    apply(val);
+    scheduleDraw();
+  };
+  const onRemoved = (coll, removeFn) => snap => {
+    delete _sync[coll][snap.key];
+    removeFn(snap.key);
+    scheduleDraw();
+  };
+  base.child('nodes').on('child_added',   onEntity('nodes', applyRemoteNode));
+  base.child('nodes').on('child_changed', onEntity('nodes', applyRemoteNode));
+  base.child('nodes').on('child_removed', onRemoved('nodes', key => { const id = Number(key.slice(1)); nodes = nodes.filter(n => n.id !== id); }));
+  base.child('strokes').on('child_added',   onEntity('strokes', applyRemoteStroke));
+  base.child('strokes').on('child_changed', onEntity('strokes', applyRemoteStroke));
+  base.child('strokes').on('child_removed', onRemoved('strokes', key => { strokes = strokes.filter(s => s.id !== key); }));
+  base.child('frames').on('child_added',   onEntity('frames', applyRemoteFrame));
+  base.child('frames').on('child_changed', onEntity('frames', applyRemoteFrame));
+  base.child('frames').on('child_removed', onRemoved('frames', key => { canvasImages = canvasImages.filter(im => im.id !== key); }));
+  base.child('groups').on('child_added',   onEntity('groups', applyRemoteGroup));
+  base.child('groups').on('child_changed', onEntity('groups', applyRemoteGroup));
+  base.child('groups').on('child_removed', onRemoved('groups', key => { groups = groups.filter(g => g.id !== key); }));
+  base.child('links').on('value', s => { const v = s.val() || []; const js = JSON.stringify(v); if (js === _sync.links) return; _sync.links = js; links = v; scheduleDraw(); });
+  base.child('meta').on('value', s => { const m = s.val(); if (!m) return; const js = JSON.stringify({ _id: m._id, fav: m.fav }); if (js === _sync.meta) return; _sync.meta = js; if (m._id != null) _id = m._id; if (m.fav && m.fav.length) { favoriteColors = m.fav; renderFavColors(); } scheduleDraw(); });
 }
 
 // Upload only new/changed images, remove images for deleted nodes/frames.
@@ -2417,7 +2549,7 @@ function broadcastState() {
   clearTimeout(_broadcastTimer);
   _broadcastTimer = setTimeout(() => {
     syncImages(); // push only new/changed images (write-once), clean up deleted ones
-    _db.ref('rooms/' + roomId + '/state').set(serializeStateForDB()).catch(() => {});
+    pushDiff();   // write only the entities that actually changed
     _db.ref('projects/' + roomId + '/lastModified').set(Date.now()).catch(() => {});
     _db.ref('projects/' + roomId + '/nodeCount').set(nodes.length).catch(() => {});
     _db.ref('projects/' + roomId + '/lastEditedBy').set(myUser.name).catch(() => {});
@@ -2429,13 +2561,13 @@ let _liveBroadcastMs = 0;
 function broadcastStateLive() {
   if (!_db) return;
   // Live previews only matter when someone else is watching. Skipping this when
-  // solo avoids serializing the whole state (incl. base64 images) ~20x/sec during
-  // draw/drag — the main cause of laggy drawing. mouseup's saveState still persists.
+  // solo avoids constant serialization during draw/drag. mouseup's saveState still
+  // persists. pushDiff naturally writes only the entities currently moving.
   if (Object.keys(remoteCursors).length === 0) return;
   const now = Date.now();
   if (now - _liveBroadcastMs < 50) return;
   _liveBroadcastMs = now;
-  _db.ref('rooms/' + roomId + '/state').set(serializeStateForDBLive()).catch(() => {});
+  pushDiff();
 }
 
 
@@ -2491,40 +2623,24 @@ function startFirebase() {
 
   armPresence(); // site-wide roster: mark online + track last active
 
-  // Canvas state sync
-  _db.ref('rooms/' + roomId + '/state').on('value', snap => {
+  // Canvas state sync. One full read on open (you need the whole board to show it),
+  // then per-entity child listeners stream only deltas — so editing one node moves
+  // just that node over the wire, not the entire board.
+  _db.ref('rooms/' + roomId).once('value', snap => {
     try {
-      const data = snap.val();
-      if (!data) { broadcastState(); if (!_historySeeded) seedHistory(); return; }
-      if (data._sender && data._sender === myUser.id) return;
-      // Remember images we already have so they don't blink while /images resolves.
-      const prevNodeImg = {}, prevFrameSrc = {};
-      nodes.forEach(n => { if (n.img) prevNodeImg['n_' + n.id] = n.img; });
-      canvasImages.forEach(im => { if (im.src) prevFrameSrc['f_' + im.id] = im.src; });
-      nodes        = data.nodes        || [];
-      links        = data.links        || [];
-      strokes      = data.strokes      || [];
-      canvasImages = data.canvasImages || [];
-      groups       = data.groups       || [];
-      _id          = data._id          || 1;
-      if (data.favoriteColors && data.favoriteColors.length) favoriteColors = data.favoriteColors;
-      // Resolve images. Precedence: embedded img (old pre-split projects, where it's
-      // still in /state) → /images store (new format, authoritative) → previously
-      // known image (anti-flash while /images is still loading).
-      nodes.forEach(n => {
-        n.img = n.img || _remoteImages['n_' + n.id] || prevNodeImg['n_' + n.id];
-        updateNodeText(n);
-        if (n.img) cacheImage(n.img);
-      });
-      canvasImages.forEach(im => {
-        im.src = im.src || _remoteImages['f_' + im.id] || prevFrameSrc['f_' + im.id];
-        if (im.src) cacheImage(im.src);
-      });
-      renderFavColors();
-      scheduleDraw();
-      // Capture the first synced state as the undo baseline (once).
-      if (!_historySeeded) seedHistory();
-    } catch(e) { console.error('Failed to apply remote state:', e); }
+      const room = snap.val() || {};
+      if (room.nodes || room.strokes || room.frames || room.groups) {
+        rebuildFromRoom(room);                 // new per-entity format
+      } else if (room.state) {
+        applyLegacyState(room.state);          // old single-blob → migrate
+        syncImages(); pushDiff();              // upload any embedded images + write entities
+        _db.ref('rooms/' + roomId + '/state').remove().catch(() => {});
+      } else {
+        syncImages(); pushDiff();              // brand-new room — seed it from local
+      }
+    } catch (e) { console.error('Initial room load failed:', e); }
+    attachEntityListeners();
+    if (!_historySeeded) seedHistory();
   });
 
   // Image sync — each image fetched once (child_added), updated/removed as needed.

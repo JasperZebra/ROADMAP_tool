@@ -106,13 +106,12 @@ const FIREBASE_CONFIG = {
 
 /rooms/
   {projectId}/
-    state/
-      nodes:        array  (node images stripped — see /images; derived render fields stripped too)
-      links:        array
-      strokes:      array
-      canvasImages: array  (image `src` stripped — see /images)
-      _id:          number (next node ID counter)
-      _sender:      string | undefined (only present on live mid-drag broadcasts)
+    nodes/{n<nodeId>}:   object (one node each; image + derived render fields stripped)
+    strokes/{strokeId}:  object (one brush/eraser stroke each; has id + t order stamp)
+    frames/{frameId}:    object (one image frame each; `src` stripped — see /images)
+    groups/{groupId}:    object (one group box each)
+    links:               array  (small — whole value)
+    meta: { _id: number (next node ID counter), fav: array (favoriteColors) }
     images/
       n_{nodeId}:   string (base64 data URL for a node image)
       f_{frameId}:  string (base64 data URL for an image frame)
@@ -120,6 +119,7 @@ const FIREBASE_CONFIG = {
       {userId}/
         wx: number (world x)
         wy: number (world y)
+    state:  (LEGACY single-blob — auto-migrated to the per-entity layout above on open, then deleted)
 
 /presence/                    (per-room, ephemeral — kept OUT of /rooms on purpose)
   {projectId}/
@@ -151,7 +151,9 @@ RTDB "Downloads" usage = bytes sent to listeners; a `.on('value')` re-downloads 
 4. **Strokes are shrunk on finish** — `simplifyStroke()` (called on draw mouseup) rounds points to 0.1 world units and drops points that barely moved. Strokes ride along in `/state` on every edit, so smaller strokes mean smaller broadcasts.
 5. **Images are compressed on upload** (see `compressImage`, capped ~1024px) so they're small both in storage and when fetched.
 
-Remaining lever if still high: editing one node still re-sends *all* nodes' (now small, image-free) metadata. True per-node granularity (keyed map + `child_*`) or Firebase Storage URLs instead of base64 would go further.
+6. **Per-entity sync** (see "Per-Entity Sync" above) — editing one node writes/downloads only that node, not the whole board. This is the main on-going-cost lever.
+
+Remaining lever if still high: base64 images (even compressed) live in `/rooms/{id}/images`; moving them to Firebase Storage (URL refs instead of base64) would cut storage further.
 
 ### Site-wide User Roster (`/users`)
 
@@ -166,23 +168,29 @@ Remaining lever if still high: editing one node still re-sends *all* nodes' (now
 Firebase writes use `.catch(() => {})` and fail **silently** (offline, security rules, quota). To prevent the roadmap from disappearing on revisit, `saveState()` also mirrors the full state to `localStorage['rm_state_' + getRoomId()]`.
 
 - `loadLocalState()` seeds the canvas from this key.
-- `startFirebase()` calls `loadLocalState()` immediately (online: as a pre-Firebase seed that real Firebase state overrides; offline: as the only restore path).
-- The state listener's `if (!data) { broadcastState(); … }` branch re-uploads the seeded local state when Firebase has no saved state — this is the recovery path.
+- `startFirebase()` calls `loadLocalState()` immediately (online: as a pre-Firebase seed; offline: as the only restore path).
+- The one-time room read (below) overrides the seed when Firebase has data; the brand-new-room branch re-uploads the local seed.
 
-Firebase remains the source of truth when it has data (its listener overrides the local seed). localStorage only fills the gap when Firebase is empty/unavailable.
+Firebase remains the source of truth when it has data. localStorage only fills the gap when Firebase is empty/unavailable.
+
+### Per-Entity Sync (Critical — replaces the old single-blob `_sender` model)
+
+The canvas is **not** one `/state` blob anymore. Each node/stroke/frame/group is its own child under `/rooms/{id}` (`nodes`, `strokes`, `frames`, `groups`), plus whole-value `links` and `meta`. This means **editing one node only writes/downloads that node**, not the whole board.
+
+- **Write:** `pushDiff()` (called by `broadcastState`, debounced, and `broadcastStateLive`, throttled) diffs the in-memory arrays against `_sync` (the JSON we last saw/wrote per key) and sends only changed/added/removed entities in **one multi-path `update()`**. `_id`/`favoriteColors` go in `meta`.
+- **Read:** one `.once('value')` on `/rooms/{id}` when the editor opens (you need the whole board once), handled by `rebuildFromRoom` — this also clears local "ghost" entities. After that, per-child listeners (`attachEntityListeners`) stream only deltas via `applyRemoteNode/Stroke/Frame/Group`.
+- **Echo suppression (replaces `_sender`):** an incoming child event is ignored if (a) its value equals `_sync` (unchanged / our final write) **or** (b) we wrote that key in the last 2 s (`_selfWrites`) — the latter stops stale echoes of rapid live-drag writes from reverting an entity mid-drag. There is **no more `_sender` tag.**
+- **Migration:** old projects with a single `/state` blob are detected on open, loaded (`applyLegacyState`), re-written in the per-entity layout (`pushDiff` + `syncImages`), and `/state` is deleted. `duplicateProject` (index.html) copies `/state` + `/images`; old duplicates still migrate on open.
+- **Stroke order:** strokes carry `id` + `t` (creation time); they're sorted by `t` so eraser/draw layering survives the keyed (unordered) storage.
+- Local persistence/undo (`serializeForStore`, history) still use whole-array snapshots with images embedded — unaffected by the DB split.
 
 ### Live Broadcast Is Skipped When Solo (Performance)
 
 `broadcastStateLive()` early-returns when `Object.keys(remoteCursors).length === 0`. Live previews only matter when a collaborator is watching, and serializing the whole state (including base64 images) ~20×/sec on every draw/drag `mousemove` was the cause of laggy drawing. `saveState()` on `mouseup` still persists committed changes for everyone, so nothing is lost when solo.
 
-### The `_sender` Pattern (Critical)
+### The `_sender` Pattern (REMOVED — historical)
 
-This is the mechanism that prevents live drag/draw broadcasts from breaking the local user's active state:
-
-- **`broadcastState()`** (committed saves): pushes state **without** `_sender`. All listeners including the sender apply it. This is what persists data and reloads correctly when reopening a project.
-- **`broadcastStateLive()`** (mid-drag/draw): pushes state **with** `_sender: myUser.id`. The sender's own listener detects `data._sender === myUser.id` and skips applying it, preventing the incoming JSON from destroying the live `_curStroke` or `_dragGroup` references.
-
-**Do not add `_sender` to `broadcastState()`** — it will cause the user's own previously-saved data to not reload when reopening a project.
+The old single-blob sync used a `_sender` tag on live broadcasts so the sender skipped its own echo. That is **gone** — see **Per-Entity Sync** above. Echo suppression is now value-equality against `_sync` plus the `_selfWrites` recent-write window. Don't reintroduce `_sender`.
 
 ### User Identity
 - Stored in `localStorage` as `rm_collab_user` — a JSON object `{ id, name, color }`
@@ -271,14 +279,14 @@ The node edit modal (`#modal-overlay`) has an **Image** section: a large full-wi
 ```
 User drags node
   → mousemove fires every ~16ms
-  → broadcastStateLive() throttled to 50ms
-    → Firebase write with _sender tag
-    → Other users' listeners receive it → draw()
-    → Own listener receives it → skips (sender check)
+  → broadcastStateLive() throttled to 50ms (skipped when solo)
+    → pushDiff(): multi-path update of ONLY the moved node(s)
+    → Other users' child_changed listeners → applyRemoteNode → draw()
+    → Own echo ignored (matches _sync, or _selfWrites < 2s)
   → mouseup fires
   → saveState() → broadcastState() debounced 150ms
-    → Firebase write without _sender
-    → ALL listeners apply it → draw()
+    → syncImages() (changed images only) + pushDiff() (changed entities only)
+    → Other users' child listeners apply just those entities → draw()
     → Project metadata updated (lastModified, nodeCount, lastEditedBy)
 ```
 
