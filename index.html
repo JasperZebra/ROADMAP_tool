@@ -224,6 +224,8 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 .swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .1s,transform .1s;}
 .swatch:hover{transform:scale(1.12);}
 .swatch.active{border-color:#fff;}
+.swatch-custom{overflow:hidden;position:relative;}
+.swatch-custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;cursor:pointer;}
 [data-theme="light"] .modal-label{color:#5c6068;}
 [data-theme="light"] .swatch.active{border-color:#1a1b1e;}
 
@@ -461,6 +463,18 @@ function renderSwatches(containerId, selected, key) {
     sw.onclick = () => { selected[key] = col; renderSwatches(containerId, selected, key); };
     row.appendChild(sw);
   });
+  // Custom color — a rainbow swatch that opens a native color picker
+  const isCustom = selected[key] && !COLLAB_COLORS.includes(selected[key]);
+  const lbl = document.createElement('label');
+  lbl.className = 'swatch swatch-custom' + (isCustom ? ' active' : '');
+  lbl.title = 'Custom color';
+  lbl.style.background = isCustom ? selected[key] : 'conic-gradient(red,#ff0,lime,aqua,blue,magenta,red)';
+  const inp = document.createElement('input');
+  inp.type = 'color';
+  inp.value = selected[key] || '#ffffff';
+  inp.oninput = () => { selected[key] = inp.value; renderSwatches(containerId, selected, key); };
+  lbl.appendChild(inp);
+  row.appendChild(lbl);
 }
 
 // ── Name prompts ──────────────────────────────────────────

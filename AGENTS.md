@@ -153,6 +153,7 @@ This is the mechanism that prevents live drag/draw broadcasts from breaking the 
 - `color` is the presence/cursor dot color, chosen from `COLLAB_COLORS`
 - `initMyUser(name, color)` (both files) updates name and, if `color` is passed, the color. Both the **join overlay** (`new_version.html` `#name-overlay`, `#join-swatches`) and the **welcome overlay** (`index.html` `#name-overlay`, `#welcome-swatches`) let a new user pick name **and** dot color before entering.
 - In `index.html`, the header **user chip** (`#user-chip`) opens a **Profile modal** (`#profile-modal`) on click — edit display name + dot color (`#profile-swatches`). `renderUserChip()` draws the chip as a colored ● dot + name. `renderSwatches(containerId, selectedObj, key)` is the shared swatch-picker renderer. Identity changes are local; they propagate to a room's presence when you next open a project (presence is written in `new_version.html`).
+- All three dot-color pickers (`renderSwatches` in `index.html`, `renderJoinSwatches` in `new_version.html`) end with a **custom-color swatch**: a `.swatch.swatch-custom` label with a rainbow `conic-gradient` background wrapping a hidden `<input type="color">`. Picking a custom color sets the selected value (shown as a solid swatch + active ring) so users aren't limited to `COLLAB_COLORS`.
 
 ---
 
