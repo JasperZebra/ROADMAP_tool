@@ -472,7 +472,14 @@ function renderSwatches(containerId, selected, key) {
   const inp = document.createElement('input');
   inp.type = 'color';
   inp.value = selected[key] || '#ffffff';
-  inp.oninput = () => { selected[key] = inp.value; renderSwatches(containerId, selected, key); };
+  // Update in place — re-rendering here would destroy this input and close the
+  // still-open native color picker, so don't call renderSwatches from oninput.
+  inp.oninput = () => {
+    selected[key] = inp.value;
+    lbl.style.background = inp.value;
+    row.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    lbl.classList.add('active');
+  };
   lbl.appendChild(inp);
   row.appendChild(lbl);
 }

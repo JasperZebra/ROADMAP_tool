@@ -2061,7 +2061,14 @@ function renderJoinSwatches() {
   const inp = document.createElement('input');
   inp.type = 'color';
   inp.value = _joinSel.color || '#ffffff';
-  inp.oninput = () => { _joinSel.color = inp.value; renderJoinSwatches(); };
+  // Update in place — re-rendering here would destroy this input and close the
+  // still-open native color picker, so don't call renderJoinSwatches from oninput.
+  inp.oninput = () => {
+    _joinSel.color = inp.value;
+    lbl.style.background = inp.value;
+    row.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    lbl.classList.add('active');
+  };
   lbl.appendChild(inp);
   row.appendChild(lbl);
 }
