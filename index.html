@@ -238,6 +238,9 @@ html,body{width:100%;min-height:100%;background:#1e1f22;font-family:'Segoe UI',s
 .roster-status{width:9px;height:9px;border-radius:50%;background:#747f8d;flex-shrink:0;}
 .roster-status.online{background:#3ba55d;box-shadow:0 0 0 3px rgba(59,165,93,0.25);}
 .roster-meta{font-size:11px;color:#949ba4;white-space:nowrap;}
+.roster-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#949ba4;padding:10px 2px 4px;position:sticky;top:0;background:#2b2d31;}
+.roster-section-title:first-child{padding-top:2px;}
+[data-theme="light"] .roster-section-title{background:#ffffff;color:#5c6068;}
 [data-theme="light"] .roster-name{color:#1a1b1e;}
 [data-theme="light"] .roster-row{border-bottom-color:#e3e5e8;}
 
@@ -618,24 +621,29 @@ function renderRoster() {
     list.innerHTML = '<div style="color:#949ba4;font-size:13px;padding:16px 2px;">No one has joined yet.</div>';
     return;
   }
-  users.sort((a, b) => {
-    const ao = a[1].online ? 1 : 0, bo = b[1].online ? 1 : 0;
-    if (ao !== bo) return bo - ao;
-    return (b[1].lastActive || 0) - (a[1].lastActive || 0);
-  });
-  list.innerHTML = users.map(([uid, u]) => {
-    const online = !!u.online;
+
+  const byName = (a, b) => (a[1].name || 'User').localeCompare(b[1].name || 'User', undefined, { sensitivity: 'base' });
+  const online  = users.filter(([, u]) => u.online).sort(byName);
+  const offline = users.filter(([, u]) => !u.online).sort(byName);
+
+  const rowHtml = ([uid, u]) => {
+    const isOnline = !!u.online;
     const me = uid === myUser.id;
     const name = esc(u.name || 'User') + (me ? ' <span style="color:#949ba4;font-weight:400;">(you)</span>' : '');
     const initial = esc((u.name || '?')[0].toUpperCase());
-    const status = online ? 'Online now' : 'Last active ' + timeAgo(u.lastActive);
+    const status = isOnline ? 'Online now' : 'Last active ' + timeAgo(u.lastActive);
     return `<div class="roster-row">
       <div class="roster-avatar" style="background:${esc(u.color || '#999')}">${initial}</div>
       <div class="roster-name">${name}</div>
-      <span class="roster-status ${online ? 'online' : ''}"></span>
+      <span class="roster-status ${isOnline ? 'online' : ''}"></span>
       <span class="roster-meta">${status}</span>
     </div>`;
-  }).join('');
+  };
+  const section = (label, arr) => arr.length
+    ? `<div class="roster-section-title">${label} (${arr.length})</div>` + arr.map(rowHtml).join('')
+    : '';
+
+  list.innerHTML = section('🟢 Online', online) + section('⚪ Offline', offline);
 }
 
 // ── Render ────────────────────────────────────────────────
