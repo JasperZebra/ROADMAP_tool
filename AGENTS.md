@@ -149,9 +149,31 @@ RTDB "Downloads" usage = bytes sent to listeners; a `.on('value')` re-downloads 
    - **Back-compat:** old projects with images embedded in `/state` still render; they auto-migrate to `/images` on the first save. `duplicateProject` (index.html) copies both `/state` and `/images`. Deleting a project removes all of `/rooms/{id}` incl. images.
 
 4. **Strokes are shrunk on finish** — `simplifyStroke()` (called on draw mouseup) rounds points to 0.1 world units and drops points that barely moved. Strokes ride along in `/state` on every edit, so smaller strokes mean smaller broadcasts.
-5. **Images are compressed on upload** (see `compressImage`, capped ~1024px) so they're small both in storage and when fetched.
+5. **Images are compressed on upload to AVIF** (see `compressImage`, capped ~1024px) so they're small both in storage and when fetched. See "AVIF Image Compression" below.
 
 6. **Per-entity sync** (see "Per-Entity Sync" above) — editing one node writes/downloads only that node, not the whole board. This is the main on-going-cost lever.
+
+7. **Per-entity payloads are gzipped** (`packVal`/`unpackVal`, using the `pako` CDN lib loaded in the head) — every `nodes`/`strokes`/`frames`/`groups`/`links`/`meta` value is gzipped before upload and inflated on read, cutting RTDB Downloads. See "Gzip Sync Layer" below. (Images are NOT gzipped — they're already-compressed AVIF; gzip wouldn't help.)
+
+### AVIF Image Compression (replaces JPEG/PNG re-encode)
+
+`compressImage()` (new_version.html) now encodes uploads to **AVIF** via the `@jsquash/avif` libavif WASM build, **lazily `import()`ed from jsDelivr** (`getAvifEncoder()`, cached in `_avifEncode`; `_avifTried` prevents retry storms). Browsers can decode AVIF in `<img>`/`drawImage` but **cannot encode it via canvas**, hence the WASM dep.
+
+- Settings = **maximum compression** (`AVIF_OPTS`): `cqLevel: 63` ("0% quality"), `cqAlphaLevel: 63` (no lossless alpha), `speed: 0` (the "slow" preset — slowest/smallest; **note:** can take a few seconds per image, bump `speed` 1–10 if too slow), `subsample: 1` (4:2:0), no lossless, `tileColsLog2/tileRowsLog2: 0` (default tile size for every image).
+- Output is a `data:image/avif;base64,…` URL (base64 via the shared `u8ToB64` helper). The rest of the pipeline (cache/render/persist/`/images` store) is unchanged — it's just a data URL.
+- **Fallback:** if the WASM fails to load OR encode throws OR the canvas pixels can't be read, it falls back to the **old JPEG/PNG** path (alpha-aware). Also still honors "never return something larger than the input."
+- Old projects with JPEG/PNG/base64 images keep rendering; only *new* uploads become AVIF.
+- **Caveat:** very old browsers without AVIF *decode* support won't show AVIF images. Acceptable for this tool.
+
+### Gzip Sync Layer (`packVal` / `unpackVal`)
+
+Lives just above `pushDiff`. `pako` is loaded as a global via a CDN `<script>` in the head (alongside Firebase).
+
+- **Write:** `pushDiff` wraps every value (entities + `links` + `meta`) in `packVal(jsonStr)`. It gzips, base64s, and stores `{ __z: <base64> }` — **but only when that's actually smaller** than the raw JSON (tiny entities + base64/wrapper overhead can exceed raw; mirrors `compressImage`'s "never bigger" rule). Otherwise it stores the plain `JSON.parse(jsonStr)` object/array as before.
+- **Read:** `unpackVal(val)` detects the `{ __z }` wrapper and inflates to a JSON string; legacy raw objects/arrays just get `JSON.stringify`'d. Used in `attachEntityListeners` (`onEntity`, `links`, `meta`) and `rebuildFromRoom` (the one-time full read inflates each child).
+- **`_sync` always holds the UNCOMPRESSED JSON string**, so per-entity diffing and echo-suppression are unaffected by whether a value was stored raw or gzipped.
+- **Back-compat:** old rooms with un-gzipped structured entities read fine (the `__z` check just falls through). The `room.state` legacy-blob migration is untouched (it was never gzipped).
+- `index.html` does **not** need `pako` — it never reads `/rooms` entities (`duplicateProject` copies `/state`+`/images` opaquely).
 
 Remaining lever if still high: base64 images (even compressed) live in `/rooms/{id}/images`; moving them to Firebase Storage (URL refs instead of base64) would cut storage further.
 
@@ -405,7 +427,7 @@ Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`
 ### 3. Image uploads are base64 in state
 Node images and standalone image frames are stored as base64 data URLs inside the state JSON. Large images will make Firebase writes slow. No CDN/storage is used — everything is embedded.
 
-All three image inputs (node-image edit modal, toolbar "Set Node Image" `#fi-img`, canvas "Image Frame" `#fi-canvas-img`) go through **`readImageFile(file, cb)`**, which also runs **`compressImage()`**: downscales to a max ~1024px longest side and re-encodes (PNG when the image has transparency, else JPEG q0.85), never returning something larger than the input. So a multi-MB photo is stored as tens of KB. This is lossy/irreversible (the original isn't kept). For normal images it reads a data URL; for **`.dds`** it runs the built-in decoder (`decodeDDSToCanvas`) and converts to a **PNG data URL**, so the rest of the app (cache/render/persist) is unchanged. Supported DDS formats: **DXT1/BC1, DXT3/BC2, DXT5/BC3, and uncompressed RGB/RGBA** (incl. DX10-header BC1–3). **BC4/BC5/BC7 are not supported** — those alert the user to re-export. The decoder is pure JS (no deps); `accept="image/*,.dds"` on the inputs.
+All three image inputs (node-image edit modal, toolbar "Set Node Image" `#fi-img`, canvas "Image Frame" `#fi-canvas-img`) go through **`readImageFile(file, cb)`**, which also runs **`compressImage()`**: downscales to a max ~1024px longest side and re-encodes to **AVIF** (max-compression settings — see "AVIF Image Compression" above), falling back to PNG (alpha) / JPEG q0.85 if the AVIF WASM is unavailable. Never returns something larger than the input. So a multi-MB photo is stored as a few KB. This is lossy/irreversible (the original isn't kept). For normal images it reads a data URL; for **`.dds`** it runs the built-in decoder (`decodeDDSToCanvas`) and converts to a PNG data URL first, which then goes through the same AVIF compression, so the rest of the app (cache/render/persist) is unchanged. Supported DDS formats: **DXT1/BC1, DXT3/BC2, DXT5/BC3, and uncompressed RGB/RGBA** (incl. DX10-header BC1–3). **BC4/BC5/BC7 are not supported** — those alert the user to re-export. The decoder is pure JS (no deps); `accept="image/*,.dds"` on the inputs.
 
 ### 4. The eraser punches transparent holes
 Eraser strokes use `destination-out` compositing, but only on the **isolated stroke layer** (see "Stroke Layer Isolation") — never on the main canvas. The canvas background color is only painted during export (via a base canvas layer). On-screen, the canvas element is transparent and the CSS `background` of `.cw` shows through erased areas.

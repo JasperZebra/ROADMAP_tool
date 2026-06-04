@@ -5,6 +5,8 @@
 <title>Pro Roadmap Builder v3</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<!-- pako: synchronous gzip used to compress per-entity sync payloads before upload (see packVal/unpackVal) -->
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;}
@@ -1984,9 +1986,42 @@ function decodeDDSToCanvas(buf) {
 // Downscale (cap longest side ~1024px) and re-encode to shrink an image before it
 // goes into state/Firebase. Alpha-aware: keeps PNG when the image has transparency,
 // uses JPEG otherwise. Never returns something larger than the input.
+// Pack a Uint8Array into a base64 string (chunked so large arrays don't blow the
+// call stack). Shared by the AVIF encoder and the gzip sync layer (packVal).
+function u8ToB64(u8) {
+  let s = ''; const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) s += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+  return btoa(s);
+}
+function b64ToU8(b64) {
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+
+// ── AVIF encoder (WASM, lazy-loaded from CDN) ─────────────
+// Browsers can DECODE avif but can't ENCODE it via canvas, so we load @jsquash's
+// libavif WASM build. Settings = max compression: cqLevel 63 (0% quality), speed 0
+// (the "slow" preset — slowest but smallest), 4:2:0 subsample, no lossless (colour
+// OR alpha), default tile size (tile*Log2 = 0) for every image.
+// NOTE: speed 0 is intentionally slow — encoding one image can take a few seconds.
+// Bump AVIF_OPTS.speed (1–10, higher = faster) if uploads feel too sluggish.
+const AVIF_OPTS = { cqLevel: 63, cqAlphaLevel: 63, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 0, subsample: 1, chromaDeltaQ: false, sharpness: 0, tune: 0 };
+let _avifEncode = null, _avifTried = false;
+async function getAvifEncoder() {
+  if (_avifEncode) return _avifEncode;
+  if (_avifTried) return null; // already failed once — don't keep retrying
+  _avifTried = true;
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@jsquash/avif@1.3.0/index.js');
+    _avifEncode = mod.encode || (mod.default && mod.default.encode) || null;
+  } catch (e) { console.warn('AVIF encoder unavailable — falling back to JPEG/PNG.', e); _avifEncode = null; }
+  return _avifEncode;
+}
+
 function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85) {
   const img = new Image();
-  img.onload = () => {
+  img.onload = async () => {
     const w = img.width, h = img.height;
     if (!w || !h) { cb(dataURL); return; }
     const scale = Math.min(1, maxDim / Math.max(w, h));
@@ -1995,11 +2030,22 @@ function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85) {
     c.width = tw; c.height = th;
     const cx = c.getContext('2d');
     cx.drawImage(img, 0, 0, tw, th);
-    let hasAlpha = false;
+    let hasAlpha = false, imgData = null;
     try {
-      const d = cx.getImageData(0, 0, tw, th).data;
+      imgData = cx.getImageData(0, 0, tw, th);
+      const d = imgData.data;
       for (let i = 3; i < d.length; i += 4) { if (d[i] < 255) { hasAlpha = true; break; } }
     } catch (e) { hasAlpha = true; } // be safe if pixels can't be read
+    // Preferred path: AVIF (max compression). Falls through to JPEG/PNG on any failure.
+    try {
+      const enc = await getAvifEncoder();
+      if (enc && imgData) {
+        const buf = await enc(imgData, AVIF_OPTS);
+        const out = 'data:image/avif;base64,' + u8ToB64(new Uint8Array(buf));
+        cb(out.length < dataURL.length ? out : dataURL); // never make it bigger
+        return;
+      }
+    } catch (e) { console.warn('AVIF encode failed — falling back to JPEG/PNG.', e); }
     const out = hasAlpha ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', quality);
     cb(out.length < dataURL.length ? out : dataURL); // never make it bigger
   };
@@ -2358,6 +2404,32 @@ function _strokeId(s) { if (!s.id) s.id = 'k' + Math.random().toString(36).slice
 function _cleanFrameForDB(im) { const c = Object.assign({}, im, { selected: false }); delete c.src; return c; }
 function _cleanGroupForDB(g) { return Object.assign({}, g, { selected: false }); }
 
+// ── gzip sync layer ──────────────────────────────────────
+// Every per-entity payload (nodes/strokes/frames/groups + links + meta) is run
+// through gzip before upload to cut RTDB "Downloads". A compressed value is stored
+// as { __z: <base64 gzip> }; reads detect that wrapper and inflate. We only keep the
+// compressed form when it's actually smaller (tiny entities + base64/wrapper overhead
+// can exceed the raw JSON), so a value is never made bigger — mirrors compressImage's
+// "never larger than input" rule. Legacy un-gzipped objects/arrays still read fine.
+// _sync always holds the UNCOMPRESSED JSON string, so diffing/echo-suppression are
+// unaffected by whether a given value ended up stored raw or gzipped.
+function packVal(jsonStr) {
+  if (typeof pako !== 'undefined') {
+    try {
+      const b64 = u8ToB64(pako.gzip(jsonStr));
+      if (b64.length + 8 < jsonStr.length) return { __z: b64 }; // +8 ≈ {"__z":""} wrapper
+    } catch (e) { /* fall through to raw */ }
+  }
+  return JSON.parse(jsonStr);
+}
+function unpackVal(val) {
+  if (val && typeof val === 'object' && typeof val.__z === 'string') {
+    try { return pako.ungzip(b64ToU8(val.__z), { to: 'string' }); }
+    catch (e) { return JSON.stringify(val); }
+  }
+  return JSON.stringify(val); // legacy raw object/array
+}
+
 // Diff in-memory state against _sync; write only what changed via one multi-path update.
 function pushDiff() {
   if (!_db) return;
@@ -2368,7 +2440,7 @@ function pushDiff() {
       const key = keyFn(item);
       const js = JSON.stringify(cleanFn(item));
       cur[key] = js;
-      if (_sync[path][key] !== js) updates[path + '/' + key] = JSON.parse(js);
+      if (_sync[path][key] !== js) updates[path + '/' + key] = packVal(js);
     });
     Object.keys(_sync[path]).forEach(key => { if (!(key in cur)) updates[path + '/' + key] = null; });
     _sync[path] = cur;
@@ -2378,10 +2450,9 @@ function pushDiff() {
   diff(canvasImages, im => im.id,      _cleanFrameForDB, 'frames');
   diff(groups,       g  => g.id,       _cleanGroupForDB, 'groups');
   const linksJs = JSON.stringify(links);
-  if (_sync.links !== linksJs) { updates['links'] = links; _sync.links = linksJs; }
-  const meta = { _id, fav: favoriteColors };
-  const metaJs = JSON.stringify(meta);
-  if (_sync.meta !== metaJs) { updates['meta'] = meta; _sync.meta = metaJs; }
+  if (_sync.links !== linksJs) { updates['links'] = packVal(linksJs); _sync.links = linksJs; }
+  const metaJs = JSON.stringify({ _id, fav: favoriteColors });
+  if (_sync.meta !== metaJs) { updates['meta'] = packVal(metaJs); _sync.meta = metaJs; }
   const keys = Object.keys(updates);
   if (!keys.length) return;
   const now = Date.now();
@@ -2423,13 +2494,15 @@ function applyRemoteGroup(d) {
 
 // Rebuild all arrays from a full room snapshot (the one-time read on open).
 function rebuildFromRoom(room) {
-  nodes        = Object.values(room.nodes  || {});
-  strokes      = Object.values(room.strokes || {});
-  canvasImages = Object.values(room.frames || {});
-  groups       = Object.values(room.groups || {});
-  links        = room.links || [];
-  if (room.meta && room.meta._id != null) _id = room.meta._id;
-  if (room.meta && room.meta.fav && room.meta.fav.length) favoriteColors = room.meta.fav;
+  const coll = m => Object.values(m || {}).map(v => JSON.parse(unpackVal(v))); // inflate each gzipped child
+  nodes        = coll(room.nodes);
+  strokes      = coll(room.strokes);
+  canvasImages = coll(room.frames);
+  groups       = coll(room.groups);
+  links        = room.links != null ? JSON.parse(unpackVal(room.links)) : [];
+  const meta   = room.meta != null ? JSON.parse(unpackVal(room.meta)) : null;
+  if (meta && meta._id != null) _id = meta._id;
+  if (meta && meta.fav && meta.fav.length) favoriteColors = meta.fav;
   _sync = { nodes: {}, strokes: {}, frames: {}, groups: {}, links: JSON.stringify(links), meta: JSON.stringify({ _id, fav: favoriteColors }) };
   nodes.forEach(n => { _sync.nodes['n' + n.id] = JSON.stringify(_cleanNodeForDB(n)); n.img = _remoteImages['n_' + n.id] || n.img; updateNodeText(n); if (n.img) cacheImage(n.img); });
   strokes.forEach(s => { _strokeId(s); _sync.strokes[s.id] = JSON.stringify(s); });
@@ -2459,10 +2532,10 @@ function attachEntityListeners() {
     if (val == null) return;
     const full = coll + '/' + key;
     if (_selfWrites[full] && Date.now() - _selfWrites[full] < 2000) return; // our own (possibly stale) echo
-    const js = JSON.stringify(val);
+    const js = unpackVal(val);
     if (_sync[coll][key] === js) return; // unchanged
     _sync[coll][key] = js;
-    apply(val);
+    apply(JSON.parse(js));
     scheduleDraw();
   };
   const onRemoved = (coll, removeFn) => snap => {
@@ -2482,8 +2555,8 @@ function attachEntityListeners() {
   base.child('groups').on('child_added',   onEntity('groups', applyRemoteGroup));
   base.child('groups').on('child_changed', onEntity('groups', applyRemoteGroup));
   base.child('groups').on('child_removed', onRemoved('groups', key => { groups = groups.filter(g => g.id !== key); }));
-  base.child('links').on('value', s => { const v = s.val() || []; const js = JSON.stringify(v); if (js === _sync.links) return; _sync.links = js; links = v; scheduleDraw(); });
-  base.child('meta').on('value', s => { const m = s.val(); if (!m) return; const js = JSON.stringify({ _id: m._id, fav: m.fav }); if (js === _sync.meta) return; _sync.meta = js; if (m._id != null) _id = m._id; if (m.fav && m.fav.length) { favoriteColors = m.fav; renderFavColors(); } scheduleDraw(); });
+  base.child('links').on('value', s => { const raw = s.val(); const js = raw == null ? '[]' : unpackVal(raw); if (js === _sync.links) return; _sync.links = js; links = JSON.parse(js); scheduleDraw(); });
+  base.child('meta').on('value', s => { const raw = s.val(); if (raw == null) return; const m = JSON.parse(unpackVal(raw)); const js = JSON.stringify({ _id: m._id, fav: m.fav }); if (js === _sync.meta) return; _sync.meta = js; if (m._id != null) _id = m._id; if (m.fav && m.fav.length) { favoriteColors = m.fav; renderFavColors(); } scheduleDraw(); });
 }
 
 // Upload only new/changed images, remove images for deleted nodes/frames.
