@@ -43,6 +43,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;background:#1e1f
 .brush-ui.active, .erase-ui.active { display:flex; }
 .brush-ui input[type="color"] { width:20px; height:20px; padding:0; border:none; cursor:pointer; background:transparent; border-radius:50%; overflow:hidden; flex-shrink:0; }
 .brush-ui input[type="range"], .erase-ui input[type="range"] { width:60px; cursor:pointer; }
+.brush-ui input.size-num, .erase-ui input.size-num { width:56px; height:22px; padding:0 4px; font-size:12px; background:#1a1b1e; color:#eee; border:1px solid #333; border-radius:4px; }
+.dropdown-menu .brush-ui input.size-num, .dropdown-menu .erase-ui input.size-num { flex:0 0 auto; }
+[data-theme="light"] .brush-ui input.size-num,[data-theme="light"] .erase-ui input.size-num { background:#fff; color:#222; border-color:#ccc; }
 .brush-label { color:#aaa; font-size:11px; font-weight:600;}
 .swatch-row { display:flex; gap:3px; align-items:center; }
 .swatch { width:15px; height:15px; border-radius:50%; cursor:pointer; border:2px solid transparent; flex-shrink:0; transition:border-color .1s, transform .1s; }
@@ -301,7 +304,6 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
       </div>
       <div class="dd-sep"></div>
       <div class="dd-item" onclick="triggerCanvasImgUpload();closeDD()">🖼️ Image Frame</div>
-      <div class="dd-item" onclick="triggerImgUpload();closeDD()">🖼️ Set Node Image</div>
     </div>
   </div>
 
@@ -316,14 +318,14 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
       <div class="brush-ui" id="brush-ui">
         <input type="color" id="brush-color" value="#ffffff" title="Brush Color" oninput="syncShelfHighlight('brush')">
         <span class="brush-label">Size:</span>
-        <input type="range" id="brush-size" min="4" max="800" value="18" title="Brush Size">
+        <input type="number" class="size-num" id="brush-size" min="1" max="800" value="18" title="Brush size (px)"><span class="brush-label">px</span>
         <button class="btn" id="btn-brush-palette" onclick="toggleBrushShelf(event)" title="Favorite colors" style="height:26px;padding:0 8px;font-size:13px;">🎨</button>
       </div>
       <div class="dd-sep"></div>
       <div class="dd-item" id="tool-erase" onclick="setTool('erase')">🧽 Erase</div>
       <div class="erase-ui" id="erase-ui">
         <span class="brush-label">Eraser:</span>
-        <input type="range" id="erase-size" min="4" max="800" value="18" title="Eraser Size">
+        <input type="number" class="size-num" id="erase-size" min="1" max="800" value="18" title="Eraser size (px)"><span class="brush-label">px</span>
         <button class="btn" onclick="clearAllDrawings()" title="Clear all drawings" style="height:26px;padding:0 8px;font-size:13px;">🗑️ Clear</button>
       </div>
       <div class="dd-sep"></div>
@@ -490,7 +492,6 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 </div>
 
 <input type="file" id="fi-json" accept=".json" style="display:none"/>
-<input type="file" id="fi-img" accept="image/*,.dds" style="display:none"/>
 <input type="file" id="fi-canvas-img" accept="image/*,.dds" style="display:none"/>
 
 <script>
@@ -1257,9 +1258,9 @@ function draw() {
 
   renderRemoteCursors();
 
-  // Brush / eraser cursor preview circle (sized by the active tool's slider)
+  // Brush / eraser cursor preview circle (sized by the active tool's px input)
   if (tool === 'draw' || tool === 'erase') {
-    const sz = parseFloat(document.getElementById(tool === 'erase' ? 'erase-size' : 'brush-size').value);
+    const sz = toolSize(tool);
     const r = sz * sc / 2;
     ctx.save();
     ctx.beginPath();
@@ -1364,7 +1365,7 @@ cv.addEventListener('mousedown', e => {
       t: Date.now(),                                      // draw order
       points: [sw(p.x, p.y)],
       color: document.getElementById('brush-color').value,
-      width: _isEraser ? parseFloat(document.getElementById('erase-size').value) : parseFloat(document.getElementById('brush-size').value),
+      width: toolSize(_isEraser ? 'erase' : 'draw'),
       isEraser: _isEraser
     };
     strokes.push(_curStroke);
@@ -2110,20 +2111,12 @@ document.getElementById('fi-canvas-img').addEventListener('change', e => {
 });
 
 // Embedded Node Specific Image Uploads
-const fiImg = document.getElementById('fi-img');
-function triggerImgUpload() {
-  const sel = nodes.find(n => n.selected);
-  if (!sel) return alert("Select a target milestone node first to attach inside graphics.");
-  fiImg.click();
+// Read the brush/eraser size (px) from its number input, clamped to a sane range
+// so a blank/invalid field never yields NaN. t = 'erase' uses #erase-size, else #brush-size.
+function toolSize(t) {
+  const v = parseFloat(document.getElementById(t === 'erase' ? 'erase-size' : 'brush-size').value);
+  return isFinite(v) && v > 0 ? Math.min(v, 800) : 18;
 }
-fiImg.addEventListener('change', e => {
-  const file = e.target.files[0]; if (!file) return;
-  readImageFile(file, dataURL => {
-    const sel = nodes.find(n => n.selected);
-    if (sel) { sel.img = dataURL; cacheImage(dataURL); updateNodeText(sel); saveState(); }
-  });
-  e.target.value = '';
-});
 
 // Remove every brush/eraser stroke (nodes, links, images and groups are kept).
 function clearAllDrawings() {
@@ -2142,13 +2135,39 @@ function saveJSON() {
   a.download = slug + '_roadmap.json'; a.click();
 }
 
+// True for an AVIF data URL — used to skip images that are already compressed.
+const _isAvifURL = u => typeof u === 'string' && u.lastIndexOf('data:image/avif', 0) === 0;
+
+// Imported JSON can carry raw (PNG/JPEG/etc) base64 images. Re-encode any that
+// aren't already AVIF to our max-compression AVIF and re-embed them in place, so
+// importing someone else's uncompressed export doesn't bloat storage/bandwidth.
+// Runs async (AVIF encode is async); calls cb(changed) when every image is done.
+function compressEmbeddedImages(cb) {
+  const jobs = [];
+  nodes.forEach(n => { if (n.img && !_isAvifURL(n.img)) jobs.push({ url: n.img, set: v => { n.img = v; updateNodeText(n); } }); });
+  canvasImages.forEach(im => { if (im.src && !_isAvifURL(im.src)) jobs.push({ url: im.src, set: v => { im.src = v; } }); });
+  if (!jobs.length) { cb && cb(false); return; }
+  let remaining = jobs.length, changed = false;
+  jobs.forEach(job => {
+    compressImage(job.url, out => {
+      if (out && out !== job.url) { job.set(out); cacheImage(out); changed = true; }
+      if (--remaining === 0) { cb && cb(changed); }
+    });
+  });
+}
+
 function openFile() { document.getElementById('fi-json').click(); }
 document.getElementById('fi-json').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
   r.onload = ev => {
-    try { historyStack = []; historyIdx = -1; loadState(ev.target.result); saveState(); } 
-    catch { alert('Could not read JSON data template structure.'); }
+    try {
+      historyStack = []; historyIdx = -1;
+      loadState(ev.target.result);
+      saveState(); // commit/share the import immediately, even before images re-encode
+      // Then auto-detect any non-AVIF embedded images and re-compress them in place.
+      compressEmbeddedImages(changed => { if (changed) { scheduleDraw(); saveState(); } });
+    } catch { alert('Could not read JSON data template structure.'); }
   };
   r.readAsText(f); e.target.value = '';
 });
