@@ -159,7 +159,7 @@ RTDB "Downloads" usage = bytes sent to listeners; a `.on('value')` re-downloads 
 
 `compressImage()` (new_version.html) now encodes uploads to **AVIF** via the `@jsquash/avif` libavif WASM build, **lazily `import()`ed from jsDelivr** (`getAvifEncoder()`, cached in `_avifEncode`; `_avifTried` prevents retry storms). Browsers can decode AVIF in `<img>`/`drawImage` but **cannot encode it via canvas**, hence the WASM dep.
 
-- Settings = **maximum compression** (`AVIF_OPTS`): `cqLevel: 63` ("0% quality"), `cqAlphaLevel: 63` (no lossless alpha), `speed: 0` (the "slow" preset — slowest/smallest; **note:** can take a few seconds per image, bump `speed` 1–10 if too slow), `subsample: 1` (4:2:0), no lossless, `tileColsLog2/tileRowsLog2: 0` (default tile size for every image).
+- Settings (`AVIF_OPTS`): `cqLevel: 57` (≈**10% quality**; cqLevel is inverted — 0 = best, 63 = worst), `cqAlphaLevel: 57` (no lossless alpha), `speed: 0` (the "slow" preset — slowest/smallest; **note:** can take a few seconds per image, bump `speed` 1–10 if too slow), `subsample: 3` (**4:4:4**, no chroma subsampling), no lossless, `tileColsLog2/tileRowsLog2: 0` (default tile size for every image). (Subsample enum: 0=4:0:0, 1=4:2:0, 2=4:2:2, 3=4:4:4.)
 - Output is a `data:image/avif;base64,…` URL (base64 via the shared `u8ToB64` helper). The rest of the pipeline (cache/render/persist/`/images` store) is unchanged — it's just a data URL.
 - **Fallback:** if the WASM fails to load OR encode throws OR the canvas pixels can't be read, it falls back to the **old JPEG/PNG** path (alpha-aware). Also still honors "never return something larger than the input."
 - Old projects with JPEG/PNG/base64 images keep rendering; only *new* uploads become AVIF.

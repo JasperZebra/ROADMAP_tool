@@ -2002,12 +2002,13 @@ function b64ToU8(b64) {
 
 // ── AVIF encoder (WASM, lazy-loaded from CDN) ─────────────
 // Browsers can DECODE avif but can't ENCODE it via canvas, so we load @jsquash's
-// libavif WASM build. Settings = max compression: cqLevel 63 (0% quality), speed 0
-// (the "slow" preset — slowest but smallest), 4:2:0 subsample, no lossless (colour
-// OR alpha), default tile size (tile*Log2 = 0) for every image.
+// libavif WASM build. Settings: cqLevel 57 (≈10% quality — cqLevel is inverted, 0=best
+// … 63=worst), speed 0 (the "slow" preset — slowest but smallest), 4:4:4 subsample
+// (subsample:3 — no chroma subsampling), no lossless (colour OR alpha), default tile
+// size (tile*Log2 = 0) for every image.
 // NOTE: speed 0 is intentionally slow — encoding one image can take a few seconds.
 // Bump AVIF_OPTS.speed (1–10, higher = faster) if uploads feel too sluggish.
-const AVIF_OPTS = { cqLevel: 63, cqAlphaLevel: 63, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 0, subsample: 1, chromaDeltaQ: false, sharpness: 0, tune: 0 };
+const AVIF_OPTS = { cqLevel: 57, cqAlphaLevel: 57, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 0, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
 let _avifEncode = null, _avifTried = false;
 async function getAvifEncoder() {
   if (_avifEncode) return _avifEncode;
