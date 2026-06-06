@@ -2027,6 +2027,22 @@ async function getAvifEncoder() {
   return _avifEncode;
 }
 
+// Diagnostic: run `avifSelfTest()` in the browser console. Reports whether the AVIF
+// WASM encoder actually loads AND encodes, and surfaces the real error if it doesn't.
+window.avifSelfTest = async function () {
+  try {
+    console.info('avifSelfTest: importing @jsquash/avif from esm.sh …');
+    const mod = await import('https://esm.sh/@jsquash/avif@1.3.0');
+    const enc = mod.encode || (mod.default && mod.default.encode);
+    if (!enc) { console.error('avifSelfTest: module loaded but has NO encode export. Keys:', Object.keys(mod)); return; }
+    console.info('avifSelfTest: module + encode export OK, trying a tiny encode …');
+    const test = new ImageData(8, 8);
+    for (let i = 0; i < test.data.length; i += 4) { test.data[i] = 200; test.data[i+1] = 100; test.data[i+2] = 50; test.data[i+3] = 255; }
+    const buf = await enc(test, AVIF_OPTS);
+    console.info('%cavifSelfTest: SUCCESS — AVIF encoding works (' + buf.byteLength + ' bytes).', 'color:#5c5;font-weight:bold');
+  } catch (e) { console.error('avifSelfTest: FAILED at —', e); }
+};
+
 function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85) {
   const img = new Image();
   img.onload = async () => {
