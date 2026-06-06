@@ -2012,7 +2012,7 @@ function b64ToU8(b64) {
 // input" guard in compressImage, an embedded image is only replaced with AVIF when the
 // AVIF is actually smaller than the source — otherwise the original is kept (so a small
 // PNG/JPEG may stay as-is). The per-image console log says which happened.
-const AVIF_OPTS = { cqLevel: 32, cqAlphaLevel: 32, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 10, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
+const AVIF_OPTS = { cqLevel: 32, cqAlphaLevel: 32, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 7, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
 // Promise-memoized so concurrent callers (e.g. importing many images at once) all
 // AWAIT the same single import instead of the first one winning and the rest getting
 // null mid-load and falling back to JPEG. Resolves to the encode fn, or null on failure.
