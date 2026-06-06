@@ -2008,7 +2008,7 @@ function b64ToU8(b64) {
 // lossless (colour OR alpha), default tile size (tile*Log2 = 0) for every image.
 // SPEED: 0=slow, ~6=medium, 10=fast. QUALITY: lower cqLevel = better looking + bigger
 // (~80%→13, ~71%→18, ~50%→32, 10%→57).
-const AVIF_OPTS = { cqLevel: 32, cqAlphaLevel: 32, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 6, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
+const AVIF_OPTS = { cqLevel: 32, cqAlphaLevel: 32, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 3, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
 let _avifEncode = null, _avifTried = false;
 async function getAvifEncoder() {
   if (_avifEncode) return _avifEncode;
