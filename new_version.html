@@ -2002,29 +2002,37 @@ function b64ToU8(b64) {
 
 // ── AVIF encoder (WASM, lazy-loaded from CDN) ─────────────
 // Browsers can DECODE avif but can't ENCODE it via canvas, so we load @jsquash's
-// libavif WASM build. Settings: cqLevel 32 (≈50% quality — cqLevel is INVERTED, 0=best
-// quality/biggest … 63=worst/smallest), speed 6 (medium preset — 0=slowest/smallest …
+// libavif WASM build. Settings: cqLevel 0 (≈100% quality — cqLevel is INVERTED, 0=best
+// quality/biggest … 63=worst/smallest), speed 10 (fastest preset — 0=slowest/smallest …
 // 10=fastest/biggest), 4:4:4 subsample (subsample:3 — no chroma subsampling), no
 // lossless (colour OR alpha), default tile size (tile*Log2 = 0) for every image.
 // SPEED: 0=slow, ~6=medium, 10=fast. QUALITY: lower cqLevel = better looking + bigger
-// (~80%→13, ~71%→18, ~50%→32, 10%→57).
+// (0→100%, ~80%→13, ~50%→32, 10%→57).
+// NOTE: cqLevel 0 is near-lossless → large files. Because of the "never larger than
+// input" guard in compressImage, an embedded image is only replaced with AVIF when the
+// AVIF is actually smaller than the source — otherwise the original is kept (so a small
+// PNG/JPEG may stay as-is). The per-image console log says which happened.
 const AVIF_OPTS = { cqLevel: 0, cqAlphaLevel: 0, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 10, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
-let _avifEncode = null, _avifTried = false;
-async function getAvifEncoder() {
-  if (_avifEncode) return _avifEncode;
-  if (_avifTried) return null; // already failed once — don't keep retrying
-  _avifTried = true;
-  try {
-    // IMPORTANT: must be a CDN that BUNDLES deps. @jsquash/avif's encode.js imports
-    // 'wasm-feature-detect' as a bare specifier, which raw cdn.jsdelivr.net/npm files
-    // can't resolve in-browser (the import throws → silent JPEG fallback). esm.sh
-    // bundles it and rewrites the wasm URLs, so AVIF actually runs.
-    const mod = await import('https://esm.sh/@jsquash/avif@1.3.0');
-    _avifEncode = mod.encode || (mod.default && mod.default.encode) || null;
-    if (_avifEncode) console.info('%cAVIF encoder ready', 'color:#5c5');
-    else console.warn('AVIF module loaded but no encode export — falling back to JPEG/PNG.');
-  } catch (e) { console.warn('AVIF encoder unavailable — falling back to JPEG/PNG.', e); _avifEncode = null; }
-  return _avifEncode;
+// Promise-memoized so concurrent callers (e.g. importing many images at once) all
+// AWAIT the same single import instead of the first one winning and the rest getting
+// null mid-load and falling back to JPEG. Resolves to the encode fn, or null on failure.
+let _avifEncodePromise = null;
+function getAvifEncoder() {
+  if (_avifEncodePromise) return _avifEncodePromise;
+  _avifEncodePromise = (async () => {
+    try {
+      // IMPORTANT: must be a CDN that BUNDLES deps. @jsquash/avif's encode.js imports
+      // 'wasm-feature-detect' as a bare specifier, which raw cdn.jsdelivr.net/npm files
+      // can't resolve in-browser (the import throws → silent JPEG fallback). esm.sh
+      // bundles it and rewrites the wasm URLs, so AVIF actually runs.
+      const mod = await import('https://esm.sh/@jsquash/avif@1.3.0');
+      const enc = mod.encode || (mod.default && mod.default.encode) || null;
+      if (enc) console.info('%cAVIF encoder ready', 'color:#5c5');
+      else console.warn('AVIF module loaded but no encode export — falling back to JPEG/PNG.');
+      return enc;
+    } catch (e) { console.warn('AVIF encoder unavailable — falling back to JPEG/PNG.', e); return null; }
+  })();
+  return _avifEncodePromise;
 }
 
 // Diagnostic: run `avifSelfTest()` in the browser console. Reports whether the AVIF
@@ -2043,7 +2051,10 @@ window.avifSelfTest = async function () {
   } catch (e) { console.error('avifSelfTest: FAILED at —', e); }
 };
 
-function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85) {
+// forceAvif=true: always return the AVIF result even if it's larger than the source
+// (used by the JSON-import re-compress so embedded images are GUARANTEED true AVIF at
+// the current settings). Default false keeps the "never larger than input" guard.
+function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85, forceAvif = false) {
   const img = new Image();
   img.onload = async () => {
     const w = img.width, h = img.height;
@@ -2066,9 +2077,9 @@ function compressImage(dataURL, cb, maxDim = 1024, quality = 0.85) {
       if (enc && imgData) {
         const buf = await enc(imgData, AVIF_OPTS);
         const out = 'data:image/avif;base64,' + u8ToB64(new Uint8Array(buf));
-        const kept = out.length < dataURL.length; // never make it bigger
-        console.info(`AVIF encoded ${tw}×${th}: ${(out.length/1024)|0}KB vs source ${(dataURL.length/1024)|0}KB — ${kept ? 'using AVIF' : 'source was smaller, kept original'}`);
-        cb(kept ? out : dataURL);
+        const useAvif = forceAvif || out.length < dataURL.length; // guard unless forced
+        console.info(`AVIF encoded ${tw}×${th}: ${(out.length/1024)|0}KB vs source ${(dataURL.length/1024)|0}KB — ${useAvif ? (forceAvif && out.length >= dataURL.length ? 'using AVIF (forced, larger than source)' : 'using AVIF') : 'source was smaller, kept original'}`);
+        cb(useAvif ? out : dataURL);
         return;
       }
     } catch (e) { console.warn('AVIF encode failed — falling back to JPEG/PNG.', e); }
@@ -2172,13 +2183,20 @@ function compressEmbeddedImages(cb) {
   nodes.forEach(n => { if (n.img && !_isAvifURL(n.img)) jobs.push({ url: n.img, set: v => { n.img = v; updateNodeText(n); } }); });
   canvasImages.forEach(im => { if (im.src && !_isAvifURL(im.src)) jobs.push({ url: im.src, set: v => { im.src = v; } }); });
   if (!jobs.length) { cb && cb(false); return; }
-  let remaining = jobs.length, changed = false;
-  jobs.forEach(job => {
+  console.info('compressEmbeddedImages: re-compressing ' + jobs.length + ' embedded image(s) …');
+  let changed = false;
+  // Process sequentially (one image fully finishes before the next starts) so we never
+  // fire many encodes at the same WASM instance at once, and every image is handled.
+  const next = i => {
+    if (i >= jobs.length) { console.info('compressEmbeddedImages: done (' + jobs.length + ' processed).'); cb && cb(changed); return; }
+    const job = jobs[i];
     compressImage(job.url, out => {
-      if (out && out !== job.url) { job.set(out); cacheImage(out); changed = true; }
-      if (--remaining === 0) { cb && cb(changed); }
-    });
-  });
+      if (out && out !== job.url) { job.set(out); cacheImage(out); changed = true; scheduleDraw(); }
+      next(i + 1);
+    }, 1024, 0.85, true); // forceAvif: embedded images become true AVIF at current settings
+
+  };
+  next(0);
 }
 
 function openFile() { document.getElementById('fi-json').click(); }
