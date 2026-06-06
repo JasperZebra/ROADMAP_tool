@@ -2002,14 +2002,13 @@ function b64ToU8(b64) {
 
 // ── AVIF encoder (WASM, lazy-loaded from CDN) ─────────────
 // Browsers can DECODE avif but can't ENCODE it via canvas, so we load @jsquash's
-// libavif WASM build. Settings: cqLevel 18 (≈71% quality — cqLevel is INVERTED, 0=best
-// quality/biggest … 63=worst/smallest), speed 0 (the "slow" preset — slowest but
-// smallest), 4:4:4 subsample (subsample:3 — no chroma subsampling), no lossless
-// (colour OR alpha), default tile size (tile*Log2 = 0) for every image.
-// NOTE: speed 0 is intentionally slow — encoding one image can take a few seconds.
-// Bump AVIF_OPTS.speed (1–10, higher = faster) if uploads feel too sluggish.
-// QUALITY: lower cqLevel = better looking + bigger. ~80%→13, ~71%→18, ~50%→32, 10%→57.
-const AVIF_OPTS = { cqLevel: 18, cqAlphaLevel: 18, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 0, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
+// libavif WASM build. Settings: cqLevel 32 (≈50% quality — cqLevel is INVERTED, 0=best
+// quality/biggest … 63=worst/smallest), speed 6 (medium preset — 0=slowest/smallest …
+// 10=fastest/biggest), 4:4:4 subsample (subsample:3 — no chroma subsampling), no
+// lossless (colour OR alpha), default tile size (tile*Log2 = 0) for every image.
+// SPEED: 0=slow, ~6=medium, 10=fast. QUALITY: lower cqLevel = better looking + bigger
+// (~80%→13, ~71%→18, ~50%→32, 10%→57).
+const AVIF_OPTS = { cqLevel: 32, cqAlphaLevel: 32, denoiseLevel: 0, tileColsLog2: 0, tileRowsLog2: 0, speed: 6, subsample: 3, chromaDeltaQ: false, sharpness: 0, tune: 0 };
 let _avifEncode = null, _avifTried = false;
 async function getAvifEncoder() {
   if (_avifEncode) return _avifEncode;
