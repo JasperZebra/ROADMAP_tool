@@ -470,8 +470,8 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
   <div class="shortcut-modal" onclick="event.stopPropagation()">
     <h3>⌨️ Keyboard Shortcuts</h3>
     <div class="shortcut-section">Navigation</div>
-    <div class="shortcut-row"><span class="shortcut-label">Pan camera</span><span class="shortcut-key">W A S D</span></div>
-    <div class="shortcut-row"><span class="shortcut-label">Zoom in / out</span><span class="shortcut-key">Scroll wheel</span></div>
+    <div class="shortcut-row"><span class="shortcut-label">Pan camera</span><span class="shortcut-key">Trackpad scroll / W A S D</span></div>
+    <div class="shortcut-row"><span class="shortcut-label">Zoom in / out</span><span class="shortcut-key">Trackpad pinch / Ctrl + wheel</span></div>
     <div class="shortcut-row"><span class="shortcut-label">Pan (mouse)</span><span class="shortcut-key">Right-click drag</span></div>
     <div class="shortcut-section">Editing</div>
     <div class="shortcut-row"><span class="shortcut-label">Undo</span><span class="shortcut-key">Ctrl + Z</span></div>
@@ -502,6 +502,8 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 // ═══════════════════════════════════════════════════════════
 const NW = 200; // node width; height is now dynamic via updateNodeText
 const SCMIN = 0.05, SCMAX = 100;
+const WHEEL_ZOOM_SENSITIVITY = 0.01;
+const WHEEL_LINE_PX = 16;
 const COLORS = ['#4752c4', '#48a97a', '#5b82f5', '#9b6fd6', '#e05050', '#6b7280'];
 
 let nodes = [];
@@ -665,6 +667,22 @@ let W = 0, H = 0;
 function ws(wx, wy) { return { x: wx * sc + px, y: wy * sc + py }; }
 function sw(sx, sy) { return { x: (sx - px) / sc, y: (sy - py) / sc }; }
 function cpos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
+function zoomAt(p, zoomFactor) {
+  let ns = sc * zoomFactor;
+  ns = Math.max(SCMIN, Math.min(SCMAX, ns));
+  const r = ns / sc;
+  px = p.x - r * (p.x - px);
+  py = p.y - r * (p.y - py);
+  sc = ns;
+}
+
+function normalizeWheelDelta(e) {
+  let unit = 1;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) unit = WHEEL_LINE_PX;
+  else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) unit = Math.max(window.innerHeight, WHEEL_LINE_PX);
+  return { x: e.deltaX * unit, y: e.deltaY * unit };
+}
 
 function resize() {
   const r = wrap.getBoundingClientRect(); W = r.width; H = r.height;
@@ -1848,22 +1866,43 @@ cv.addEventListener('wheel', e => {
   if (modal.classList.contains('show')) return;
   e.preventDefault();
   const p = cpos(e);
+  const delta = normalizeWheelDelta(e);
+  const isZoomGesture = e.ctrlKey || e.metaKey;
 
   // Scroll inside node description area instead of zooming
   const hn = hitNode(p.x, p.y);
-  if (hn && (!hn.tasks || hn.tasks.length === 0) && hn.descLines) {
+  if (!isZoomGesture && hn && (!hn.tasks || hn.tasks.length === 0) && hn.descLines) {
     const ns2 = ws(hn.x, hn.y);
     const cY = ns2.y + hn.contentY * sc, cH = hn.contentH * sc, pd = 10 * sc;
     if (p.x >= ns2.x + pd && p.x <= ns2.x + hn.w * sc - pd && p.y >= cY && p.y <= cY + cH) {
       const maxS = Math.max(0, hn.descLines.length * 12 - hn.contentH);
-      if (maxS > 0) { hn.descScroll = Math.max(0, Math.min((hn.descScroll||0) + e.deltaY * 0.05, maxS)); draw(); return; }
+      if (maxS > 0) { hn.descScroll = Math.max(0, Math.min((hn.descScroll||0) + delta.y * 0.05, maxS)); draw(); return; }
     }
   }
 
-  const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-  let ns = sc * zoomFactor;
-  ns = Math.max(SCMIN, Math.min(SCMAX, ns));
-  const r = ns / sc; px = p.x - r * (p.x - px); py = p.y - r * (p.y - py); sc = ns;
+  if (isZoomGesture) {
+    zoomAt(p, Math.exp(-delta.y * WHEEL_ZOOM_SENSITIVITY));
+  } else {
+    px -= delta.x;
+    py -= delta.y;
+  }
+  draw();
+}, { passive: false });
+
+let _gestureLastScale = 1;
+cv.addEventListener('gesturestart', e => {
+  if (modal.classList.contains('show')) return;
+  e.preventDefault();
+  _gestureLastScale = e.scale || 1;
+}, { passive: false });
+
+cv.addEventListener('gesturechange', e => {
+  if (modal.classList.contains('show')) return;
+  e.preventDefault();
+  const p = cpos(e);
+  const scale = e.scale || 1;
+  zoomAt(p, scale / _gestureLastScale);
+  _gestureLastScale = scale;
   draw();
 }, { passive: false });
 

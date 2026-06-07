@@ -74,6 +74,19 @@ git push
 
 GitHub Pages takes ~30 seconds to update after a push.
 
+### 5. Commit Message Format
+
+All commits must use this format:
+
+```text
+docs/feat/fix/(or another appropriate type): title of change
+
+problem: <description of problem>
+solution: <description of solution>
+impact: <impact of this change>
+reference: <reference to this change in the docs if applicable>
+```
+
 ---
 
 ## Firebase Architecture
@@ -284,7 +297,7 @@ The link tool button is labeled **"Link/Unlink"** — clicking an existing link 
 
 **Canvas background** is a per-user local setting (`localStorage['rm_canvas_bg']`), applied via `applyCanvasBg()` as an inline `background` on `#cw` (the canvas element itself is transparent). When set it overrides the theme default in both themes; `resetCanvasBg()` clears it and reverts to the CSS theme color. `applyTheme()` calls `applyCanvasBg()` so the picker stays synced to the theme default when no custom color is set. Export (`exportImage`) fills its base with `localStorage['rm_canvas_bg'] || tc('#2c2d31','#dde1e7')` so exports match the chosen background. It is **not** broadcast — it's a personal preference, not roadmap state.
 
-The zoom +/− buttons and the `%` label were removed from the toolbar. Zoom is now **scroll-wheel only** (still multiplicative; `zB()` and the `#zl` label no longer exist).
+The zoom +/− buttons and the `%` label were removed from the toolbar. Trackpad/mouse navigation is split in `new_version.html`: plain `wheel` events pan the canvas (`px -= deltaX`, `py -= deltaY`), while pinch/Ctrl-wheel zooms around the pointer via `zoomAt()`. Safari-style `gesturestart`/`gesturechange` events are also handled for Mac trackpad pinch. `zB()` and the `#zl` label no longer exist.
 
 ### Edit Node Modal — Image
 The node edit modal (`#modal-overlay`) has an **Image** section: a large full-width preview (`#edit-img-preview`, `max-height:220px`, `object-fit:contain` so the whole image shows) above an "Add / Change" button (triggers hidden `#edit-img-file`) and a "Remove" button. The change is **staged** in `_editImgStaged` (`undefined` = unchanged, a dataURL = new image, `''` = removed) and applied to `_et.img` only in `commitEdit`, so Cancel discards it. **This is now the only way to set a node image** — the old toolbar "Set Node Image" item (`triggerImgUpload`/`#fi-img`) was removed from the Add dropdown. The `.modal` is `max-height:90vh; overflow-y:auto` so it scrolls on short screens.
@@ -347,6 +360,8 @@ Defined in `NODE_TEMPLATES` object. Keys: `bugfix`, `milestone`, `feature`, `tas
 | Key | Action |
 |---|---|
 | `W/A/S/D` | Pan camera |
+| Trackpad scroll | Pan camera |
+| Trackpad pinch / `Ctrl+wheel` | Zoom in/out |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` | Redo |
 | `Ctrl+C` | Copy selected node(s) |
@@ -425,8 +440,8 @@ They must always show the same data and the same ⋯ dropdown options. Current p
 ### 1. initDemo nodes are removed
 The original file had demo nodes that loaded on every page open. These were removed. New projects start blank.
 
-### 2. Scroll zoom is multiplicative
-Zoom uses `sc * 1.1` or `sc * 0.9` (not additive). `SCMIN = 0.05`, `SCMAX = 100`. Zoom is scroll-wheel only — the toolbar +/− buttons and `%` label were removed.
+### 2. Trackpad scroll pans; pinch zooms
+Plain `wheel` input pans the canvas so Mac two-finger trackpad scroll works in both axes. Pinch gestures and `Ctrl`/`⌘` + wheel zoom around the pointer through `zoomAt()` using multiplicative scaling clamped by `SCMIN = 0.05`, `SCMAX = 100`. Keep node-description wheel scrolling ahead of canvas pan for non-zoom gestures. The toolbar +/− buttons and `%` label were removed.
 
 ### 3. Image uploads are base64 in state
 Node images and standalone image frames are stored as base64 data URLs inside the state JSON. Large images will make Firebase writes slow. No CDN/storage is used — everything is embedded.

@@ -6,6 +6,18 @@ A real-time collaborative visual roadmap builder. Create milestone nodes, connec
 
 ---
 
+## Local Testing
+
+This app is static HTML, so local testing only needs a simple file server:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000/` for the Projects Hub, or `http://localhost:8000/new_version.html?p=local-test` for the canvas editor. Firebase is still the shared live database, so use a throwaway project ID when testing.
+
+---
+
 ## Getting Started
 
 1. Open the link above — you land on the **Projects Hub**
@@ -58,7 +70,6 @@ Each card shows the project name, node count, last edited time, who last edited 
 | **🧽 Erase** | Erase brush strokes |
 | **File ▾** | Open JSON, Save JSON, Export PNG, Export JPEG |
 | **🔗 Share** | Copies the session URL to your clipboard |
-| **− % +** | Zoom out / in |
 
 ---
 
@@ -133,8 +144,8 @@ Standalone photo frames that float on the canvas independently of nodes.
 
 | Action | How |
 |---|---|
-| Pan | Hold **right-click** and drag, or hold **W / A / S / D** |
-| Zoom | Scroll wheel, or **−** / **+** buttons in toolbar |
+| Pan | Two-finger trackpad scroll, hold **right-click** and drag, or hold **W / A / S / D** |
+| Zoom | Trackpad pinch, or **Ctrl / ⌘ + scroll wheel** |
 
 ---
 
@@ -143,7 +154,9 @@ Standalone photo frames that float on the canvas independently of nodes.
 | Shortcut | Action |
 |---|---|
 | `W` `A` `S` `D` | Pan camera |
-| `Scroll` | Zoom in / out |
+| `Trackpad scroll` | Pan camera |
+| `Trackpad pinch` | Zoom in / out |
+| `Ctrl / ⌘ + scroll wheel` | Zoom in / out |
 | `Ctrl + Z` | Undo |
 | `Ctrl + Shift + Z` | Redo |
 | `Ctrl + C` | Copy selected node(s) |
