@@ -334,6 +334,14 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
         <input type="color" id="canvas-bg-color" title="Canvas background color" oninput="setCanvasBg(this.value)">
         <button class="btn" onclick="resetCanvasBg()" title="Reset to theme default" style="height:26px;padding:0 8px;font-size:13px;margin-left:auto;">Reset</button>
       </div>
+      <div class="dd-sep"></div>
+      <div class="brush-ui" id="grid-snap-ui" style="display:flex;">
+        <span class="brush-label">⊞ Snap:</span>
+        <button class="btn" id="btn-grid-snap" onclick="toggleGridSnap()" style="height:26px;padding:0 10px;font-size:12px;">Off</button>
+        <span class="brush-label">Grid:</span>
+        <input type="number" class="size-num" id="grid-size-input" min="10" max="200" value="40" title="Grid size (world units)" oninput="setGridSize(this.value)" style="width:48px;">
+        <span class="brush-label">u</span>
+      </div>
     </div>
   </div>
   <div class="color-shelf-pop" id="brush-shelf"></div>
@@ -514,6 +522,9 @@ let groups = [];
 let favoriteColors = ['#4752c4','#48a97a','#e05050','#e8a838','#9b6fd6','#5b82f5','#6b7280','#ffffff'];
 let _id = 1;
 
+// ── Grid snap state ───────────────────────────────────────
+let gridSnap = { enabled: false, size: 40 };
+
 let tool = 'select'; // 'select', 'link', 'draw', 'erase'
 let px = 120, py = 80, sc = 1;
 
@@ -574,7 +585,7 @@ let historyStack = [];
 let historyIdx = -1;
 
 function serializeForStore() {
-  return JSON.stringify({ nodes, links, strokes, canvasImages, groups, _id, favoriteColors });
+  return JSON.stringify({ nodes, links, strokes, canvasImages, groups, _id, favoriteColors, gridSnap });
 }
 
 // Local persistence fallback — survives reloads even when Firebase writes fail
@@ -617,6 +628,7 @@ function loadState(stateStr) {
   _id = d._id || 1;
   
   if (d.favoriteColors && d.favoriteColors.length) favoriteColors = d.favoriteColors;
+  if (d.gridSnap) { gridSnap = Object.assign(gridSnap, d.gridSnap); applyGridSnapUI(); }
   groups = d.groups || [];
   // Ensure strokes carry a stable id + draw-order timestamp (older saves/JSON lack them).
   strokes.forEach((s, i) => { _strokeId(s); if (s.t == null) s.t = i; });
@@ -980,10 +992,34 @@ function renderAll(ctx, nodes, links, strokes, sc, px, py, isExport=false) {
   const vx1 = (W - px) / sc + pad, vy1 = (H - py) / sc + pad;
   const inView = (x, y, w, h) => isExport || (x + w > vx0 && x < vx1 && y + h > vy0 && y < vy1);
 
-  // 0. Draw Group Boxes (background, behind everything)
+  // 0. Draw Grid (when snap mode is on, behind everything including groups)
+  if (gridSnap.enabled && !isExport) {
+    const gs = gridSnap.size;
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    // Dot color: subtle in both themes
+    const dotColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+    const dotR = Math.max(0.8, 1.2 * sc); // dot radius scales slightly with zoom but stays small
+    // World coords of the visible area
+    const gx0 = Math.floor(vx0 / gs) * gs;
+    const gy0 = Math.floor(vy0 / gs) * gs;
+    ctx.save();
+    ctx.fillStyle = dotColor;
+    for (let wx = gx0; wx < vx1 + gs; wx += gs) {
+      for (let wy = gy0; wy < vy1 + gs; wy += gs) {
+        const sx = wx * sc + px;
+        const sy = wy * sc + py;
+        ctx.beginPath();
+        ctx.arc(sx, sy, dotR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // 1. Draw Group Boxes (background, behind everything)
   groups.forEach(g => { if (inView(g.x, g.y, g.w, g.h)) drawGroup(ctx, g, sc, px, py, isExport); });
 
-  // 1. Draw Brush Strokes on an ISOLATED layer, then composite it down.
+  // 2. Draw Brush Strokes on an ISOLATED layer, then composite it down.
   //    Erasing only removes brush ink within this layer — the group boxes drawn
   //    above (and everything drawn below) are never touched by 'destination-out'.
   if (strokes.length) {
@@ -1290,6 +1326,21 @@ function drawNodeOnCtx(c, n, wsFunc, scale, isExport) {
     c.fillText('✓ COMPLETE', tabX + tabW / 2, tabY + tabH / 2);
     c.restore();
   }
+
+  // Snap center dot — shown when grid snap is active
+  if (gridSnap.enabled && !isExport) {
+    const cx = s.x + nw / 2;
+    const cy = s.y + nh / 2;
+    const r = 4 * scale;
+    c.save();
+    c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2);
+    c.fillStyle = '#7289da';
+    c.fill();
+    c.strokeStyle = '#fff';
+    c.lineWidth = 1.5 * scale;
+    c.stroke();
+    c.restore();
+  }
 }
 
 function draw() {
@@ -1493,13 +1544,19 @@ cv.addEventListener('mousedown', e => {
     if (!e.shiftKey) canvasImages.forEach(x => x.selected = false);
     _dn = n; _isDrag = false;
     
-    if (!n.selected && !e.shiftKey) {
+    if (gridSnap.enabled) {
+      // Snap mode: always move only this node — deselect everything else
+      nodes.forEach(x => x.selected = false);
+      n.selected = true;
+    } else if (!n.selected && !e.shiftKey) {
       nodes.forEach(x => x.selected = false);
       n.selected = true;
     }
     
-    const activeSelectedIds = nodes.filter(x => x.selected).map(x => x.id);
-    const setIds = getDownstreamTree(activeSelectedIds);
+    const activeSelectedIds = gridSnap.enabled
+      ? [n.id]
+      : nodes.filter(x => x.selected).map(x => x.id);
+    const setIds = gridSnap.enabled ? new Set([n.id]) : getDownstreamTree(activeSelectedIds);
     
     const w = sw(p.x, p.y);
     _dragGroup = Array.from(setIds).map(id => {
@@ -1601,8 +1658,18 @@ window.addEventListener('mousemove', e => {
     _isDrag = true;
     const w = sw(p.x, p.y);
     _dragGroup.forEach(item => {
-      item.node.x = w.x + item.offX;
-      item.node.y = w.y + item.offY;
+      let nx = w.x + item.offX;
+      let ny = w.y + item.offY;
+      // Snap center to grid unless Shift is held
+      if (gridSnap.enabled && !e.shiftKey) {
+        const gs = gridSnap.size;
+        const cx = nx + item.node.w / 2;
+        const cy = ny + (item.node.h || 0) / 2;
+        nx = Math.round(cx / gs) * gs - item.node.w / 2;
+        ny = Math.round(cy / gs) * gs - (item.node.h || 0) / 2;
+      }
+      item.node.x = nx;
+      item.node.y = ny;
     });
     broadcastStateLive(); scheduleDraw();
   }
@@ -2589,7 +2656,7 @@ function pushDiff() {
   diff(groups,       g  => g.id,       _cleanGroupForDB, 'groups');
   const linksJs = JSON.stringify(links);
   if (_sync.links !== linksJs) { updates['links'] = packVal(linksJs); _sync.links = linksJs; }
-  const metaJs = JSON.stringify({ _id, fav: favoriteColors });
+  const metaJs = JSON.stringify({ _id, fav: favoriteColors, gridSnap });
   if (_sync.meta !== metaJs) { updates['meta'] = packVal(metaJs); _sync.meta = metaJs; }
   const keys = Object.keys(updates);
   if (!keys.length) return;
@@ -2641,7 +2708,8 @@ function rebuildFromRoom(room) {
   const meta   = room.meta != null ? JSON.parse(unpackVal(room.meta)) : null;
   if (meta && meta._id != null) _id = meta._id;
   if (meta && meta.fav && meta.fav.length) favoriteColors = meta.fav;
-  _sync = { nodes: {}, strokes: {}, frames: {}, groups: {}, links: JSON.stringify(links), meta: JSON.stringify({ _id, fav: favoriteColors }) };
+  if (meta && meta.gridSnap) { gridSnap = Object.assign(gridSnap, meta.gridSnap); applyGridSnapUI(); }
+  _sync = { nodes: {}, strokes: {}, frames: {}, groups: {}, links: JSON.stringify(links), meta: JSON.stringify({ _id, fav: favoriteColors, gridSnap }) };
   nodes.forEach(n => { _sync.nodes['n' + n.id] = JSON.stringify(_cleanNodeForDB(n)); n.img = _remoteImages['n_' + n.id] || n.img; updateNodeText(n); if (n.img) cacheImage(n.img); });
   strokes.forEach(s => { _strokeId(s); _sync.strokes[s.id] = JSON.stringify(s); });
   strokes.sort((a, b) => (a.t || 0) - (b.t || 0) || ('' + a.id).localeCompare('' + b.id));
@@ -2694,7 +2762,7 @@ function attachEntityListeners() {
   base.child('groups').on('child_changed', onEntity('groups', applyRemoteGroup));
   base.child('groups').on('child_removed', onRemoved('groups', key => { groups = groups.filter(g => g.id !== key); }));
   base.child('links').on('value', s => { const raw = s.val(); const js = raw == null ? '[]' : unpackVal(raw); if (js === _sync.links) return; _sync.links = js; links = JSON.parse(js); scheduleDraw(); });
-  base.child('meta').on('value', s => { const raw = s.val(); if (raw == null) return; const m = JSON.parse(unpackVal(raw)); const js = JSON.stringify({ _id: m._id, fav: m.fav }); if (js === _sync.meta) return; _sync.meta = js; if (m._id != null) _id = m._id; if (m.fav && m.fav.length) { favoriteColors = m.fav; renderFavColors(); } scheduleDraw(); });
+  base.child('meta').on('value', s => { const raw = s.val(); if (raw == null) return; const m = JSON.parse(unpackVal(raw)); const js = JSON.stringify({ _id: m._id, fav: m.fav, gridSnap: m.gridSnap }); if (js === _sync.meta) return; _sync.meta = js; if (m._id != null) _id = m._id; if (m.fav && m.fav.length) { favoriteColors = m.fav; renderFavColors(); } if (m.gridSnap) { gridSnap = Object.assign(gridSnap, m.gridSnap); applyGridSnapUI(); } scheduleDraw(); });
 }
 
 // Upload only new/changed images, remove images for deleted nodes/frames.
@@ -3044,8 +3112,32 @@ function resetCanvasBg() {
   applyCanvasBg();
 }
 
+// ── Grid Snap ─────────────────────────────────────────────
+function applyGridSnapUI() {
+  const btn = document.getElementById('btn-grid-snap');
+  const inp = document.getElementById('grid-size-input');
+  if (btn) { btn.textContent = gridSnap.enabled ? 'On' : 'Off'; btn.classList.toggle('active', gridSnap.enabled); }
+  if (inp) inp.value = gridSnap.size;
+}
+
+function toggleGridSnap() {
+  gridSnap.enabled = !gridSnap.enabled;
+  applyGridSnapUI();
+  saveState();
+  scheduleDraw();
+}
+
+function setGridSize(val) {
+  const n = parseInt(val, 10);
+  if (!isFinite(n) || n < 10) return;
+  gridSnap.size = Math.min(n, 200);
+  if (gridSnap.enabled) scheduleDraw();
+  saveState();
+}
+
 applyTheme(localStorage.getItem('rm_theme') || 'dark');
 applyCanvasBg();
+applyGridSnapUI();
 
 // Boot: redirect to projects if no project ID, else start session
 (function boot() {
