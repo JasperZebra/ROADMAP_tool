@@ -1870,19 +1870,19 @@ function _wasdLoop() {
   }
 }
 
-// ── Smooth zoom momentum ──────────────────────────────────
-// Wheel zoom events are batched into a velocity accumulator and replayed
-// each rAF tick so zoom eases in/out instead of snapping per-event.
-let _zoomVel = 0;          // accumulated log-scale zoom velocity
-let _zoomOrigin = null;    // screen point to zoom around
+// Accumulated zoom for the current rAF frame — batches rapid wheel events
+// (e.g. trackpad pinch) into a single draw call instead of one per event.
+let _zoomAccum = 0;
+let _zoomOrigin = null;
 let _zoomRaf = null;
 
-function _zoomTick() {
-  if (Math.abs(_zoomVel) < 0.0001) { _zoomVel = 0; _zoomRaf = null; return; }
-  zoomAt(_zoomOrigin, Math.exp(_zoomVel));
-  _zoomVel *= 0.78;        // friction — lower = snappier, higher = floatier
+function _flushZoom() {
+  _zoomRaf = null;
+  if (_zoomAccum === 0 || !_zoomOrigin) return;
+  zoomAt(_zoomOrigin, Math.exp(_zoomAccum));
+  _zoomAccum = 0;
+  _zoomOrigin = null;
   draw();
-  _zoomRaf = requestAnimationFrame(_zoomTick);
 }
 
 cv.addEventListener('wheel', e => {
@@ -1904,10 +1904,10 @@ cv.addEventListener('wheel', e => {
   }
 
   if (isZoomGesture) {
-    // Accumulate into momentum — keep the zoom origin at the cursor
+    // Batch all zoom events that land in the same frame into one draw call
+    _zoomAccum += -delta.y * WHEEL_ZOOM_SENSITIVITY;
     _zoomOrigin = p;
-    _zoomVel += -delta.y * WHEEL_ZOOM_SENSITIVITY;
-    if (!_zoomRaf) _zoomRaf = requestAnimationFrame(_zoomTick);
+    if (!_zoomRaf) _zoomRaf = requestAnimationFrame(_flushZoom);
   } else {
     px -= delta.x;
     py -= delta.y;
