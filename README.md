@@ -145,7 +145,7 @@ Standalone photo frames that float on the canvas independently of nodes.
 | Action | How |
 |---|---|
 | Pan | Two-finger trackpad scroll, hold **right-click** and drag, or hold **W / A / S / D** |
-| Zoom | Trackpad pinch, or **Ctrl / ⌘ + scroll wheel** |
+| Zoom | Mouse wheel, trackpad pinch, or **Ctrl / ⌘ + scroll wheel** |
 
 ---
 
@@ -155,6 +155,7 @@ Standalone photo frames that float on the canvas independently of nodes.
 |---|---|
 | `W` `A` `S` `D` | Pan camera |
 | `Trackpad scroll` | Pan camera |
+| `Mouse wheel` | Zoom in / out |
 | `Trackpad pinch` | Zoom in / out |
 | `Ctrl / ⌘ + scroll wheel` | Zoom in / out |
 | `Ctrl + Z` | Undo |

@@ -471,7 +471,7 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
     <h3>⌨️ Keyboard Shortcuts</h3>
     <div class="shortcut-section">Navigation</div>
     <div class="shortcut-row"><span class="shortcut-label">Pan camera</span><span class="shortcut-key">Trackpad scroll / W A S D</span></div>
-    <div class="shortcut-row"><span class="shortcut-label">Zoom in / out</span><span class="shortcut-key">Trackpad pinch / Ctrl + wheel</span></div>
+    <div class="shortcut-row"><span class="shortcut-label">Zoom in / out</span><span class="shortcut-key">Mouse wheel / trackpad pinch / Ctrl + wheel</span></div>
     <div class="shortcut-row"><span class="shortcut-label">Pan (mouse)</span><span class="shortcut-key">Right-click drag</span></div>
     <div class="shortcut-section">Editing</div>
     <div class="shortcut-row"><span class="shortcut-label">Undo</span><span class="shortcut-key">Ctrl + Z</span></div>
@@ -504,6 +504,8 @@ const NW = 200; // node width; height is now dynamic via updateNodeText
 const SCMIN = 0.05, SCMAX = 100;
 const WHEEL_ZOOM_SENSITIVITY = 0.01;
 const WHEEL_LINE_PX = 16;
+const WHEEL_MOUSE_NOTCH_PX = 50;
+const WHEEL_MOUSE_AXIS_RATIO = 3;
 const COLORS = ['#4752c4', '#48a97a', '#5b82f5', '#9b6fd6', '#e05050', '#6b7280'];
 
 let nodes = [];
@@ -682,6 +684,12 @@ function normalizeWheelDelta(e) {
   if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) unit = WHEEL_LINE_PX;
   else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) unit = Math.max(window.innerHeight, WHEEL_LINE_PX);
   return { x: e.deltaX * unit, y: e.deltaY * unit };
+}
+
+function isWheelMouseZoom(e, delta) {
+  if (e.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return true;
+  const ax = Math.abs(delta.x), ay = Math.abs(delta.y);
+  return ay >= WHEEL_MOUSE_NOTCH_PX && ay >= ax * WHEEL_MOUSE_AXIS_RATIO;
 }
 
 function resize() {
@@ -1867,7 +1875,7 @@ cv.addEventListener('wheel', e => {
   e.preventDefault();
   const p = cpos(e);
   const delta = normalizeWheelDelta(e);
-  const isZoomGesture = e.ctrlKey || e.metaKey;
+  const isZoomGesture = e.ctrlKey || e.metaKey || isWheelMouseZoom(e, delta);
 
   // Scroll inside node description area instead of zooming
   const hn = hitNode(p.x, p.y);
