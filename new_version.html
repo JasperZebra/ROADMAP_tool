@@ -471,7 +471,7 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
     <h3>⌨️ Keyboard Shortcuts</h3>
     <div class="shortcut-section">Navigation</div>
     <div class="shortcut-row"><span class="shortcut-label">Pan camera</span><span class="shortcut-key">Trackpad scroll / W A S D</span></div>
-    <div class="shortcut-row"><span class="shortcut-label">Zoom in / out</span><span class="shortcut-key">Mouse wheel / trackpad pinch / Ctrl + wheel</span></div>
+    <div class="shortcut-row"><span class="shortcut-label">Zoom in / out</span><span class="shortcut-key">Trackpad pinch / Ctrl + scroll</span></div>
     <div class="shortcut-row"><span class="shortcut-label">Pan (mouse)</span><span class="shortcut-key">Right-click drag</span></div>
     <div class="shortcut-section">Editing</div>
     <div class="shortcut-row"><span class="shortcut-label">Undo</span><span class="shortcut-key">Ctrl + Z</span></div>
@@ -502,10 +502,8 @@ canvas{position:absolute;top:0;left:0;display:block;touch-action:none;}
 // ═══════════════════════════════════════════════════════════
 const NW = 200; // node width; height is now dynamic via updateNodeText
 const SCMIN = 0.05, SCMAX = 100;
-const WHEEL_ZOOM_SENSITIVITY = 0.01;
+const WHEEL_ZOOM_SENSITIVITY = 0.010; // per pixel; exp curve keeps it feeling linear
 const WHEEL_LINE_PX = 16;
-const WHEEL_MOUSE_NOTCH_PX = 50;
-const WHEEL_MOUSE_AXIS_RATIO = 3;
 const COLORS = ['#4752c4', '#48a97a', '#5b82f5', '#9b6fd6', '#e05050', '#6b7280'];
 
 let nodes = [];
@@ -670,13 +668,47 @@ function ws(wx, wy) { return { x: wx * sc + px, y: wy * sc + py }; }
 function sw(sx, sy) { return { x: (sx - px) / sc, y: (sy - py) / sc }; }
 function cpos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
+// ── Smooth zoom ───────────────────────────────────────────
+// Zoom gestures accumulate into _zTarget. A rAF loop lerps sc toward _zTarget
+// each frame, keeping the canvas anchored to _zCenter (screen coords).
+// Result: mouse-wheel notches and pinch both feel fluid, never jumpy.
+let _zTarget = null;   // null = idle; number = destination scale
+let _zCenter = { x: 0, y: 0 };
+let _zRafId  = null;
+const ZOOM_LERP = 0.16; // 0–1: higher = snappier, lower = floatier
+
+function _applyZoomImmediate(newSc, center) {
+  newSc = Math.max(SCMIN, Math.min(SCMAX, newSc));
+  const r = newSc / sc;
+  px = center.x - r * (center.x - px);
+  py = center.y - r * (center.y - py);
+  sc = newSc;
+}
+
+function _zoomLerpFrame() {
+  if (_zTarget === null) { _zRafId = null; return; }
+  const diff = _zTarget - sc;
+  if (Math.abs(diff) < sc * 0.0002) {
+    _applyZoomImmediate(_zTarget, _zCenter);
+    _zTarget = null; _zRafId = null;
+    draw(); return;
+  }
+  _applyZoomImmediate(sc + diff * ZOOM_LERP, _zCenter);
+  draw();
+  _zRafId = requestAnimationFrame(_zoomLerpFrame);
+}
+
 function zoomAt(p, zoomFactor) {
-  let ns = sc * zoomFactor;
-  ns = Math.max(SCMIN, Math.min(SCMAX, ns));
-  const r = ns / sc;
-  px = p.x - r * (p.x - px);
-  py = p.y - r * (p.y - py);
-  sc = ns;
+  const base = _zTarget !== null ? _zTarget : sc;
+  _zTarget = Math.max(SCMIN, Math.min(SCMAX, base * zoomFactor));
+  // Blend anchor toward new pointer so rapid panning still anchors correctly
+  if (_zRafId === null) {
+    _zCenter = { x: p.x, y: p.y };
+  } else {
+    _zCenter.x += (p.x - _zCenter.x) * 0.25;
+    _zCenter.y += (p.y - _zCenter.y) * 0.25;
+  }
+  if (!_zRafId) _zRafId = requestAnimationFrame(_zoomLerpFrame);
 }
 
 function normalizeWheelDelta(e) {
@@ -686,11 +718,6 @@ function normalizeWheelDelta(e) {
   return { x: e.deltaX * unit, y: e.deltaY * unit };
 }
 
-function isWheelMouseZoom(e, delta) {
-  if (e.deltaMode !== WheelEvent.DOM_DELTA_PIXEL) return true;
-  const ax = Math.abs(delta.x), ay = Math.abs(delta.y);
-  return ay >= WHEEL_MOUSE_NOTCH_PX && ay >= ax * WHEEL_MOUSE_AXIS_RATIO;
-}
 
 function resize() {
   const r = wrap.getBoundingClientRect(); W = r.width; H = r.height;
@@ -1875,7 +1902,9 @@ cv.addEventListener('wheel', e => {
   e.preventDefault();
   const p = cpos(e);
   const delta = normalizeWheelDelta(e);
-  const isZoomGesture = e.ctrlKey || e.metaKey || isWheelMouseZoom(e, delta);
+  // ctrlKey is set by the OS for trackpad pinch-to-zoom AND Ctrl+wheel on all platforms.
+  // Two-finger scroll never sets ctrlKey, so this cleanly separates the two gestures.
+  const isZoomGesture = e.ctrlKey || e.metaKey;
 
   // Scroll inside node description area instead of zooming
   const hn = hitNode(p.x, p.y);
@@ -1890,7 +1919,6 @@ cv.addEventListener('wheel', e => {
 
   if (isZoomGesture) {
     zoomAt(p, Math.exp(-delta.y * WHEEL_ZOOM_SENSITIVITY));
-    if (!cv._zoomRaf) cv._zoomRaf = requestAnimationFrame(() => { cv._zoomRaf = null; draw(); });
   } else {
     px -= delta.x;
     py -= delta.y;
