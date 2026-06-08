@@ -1870,21 +1870,6 @@ function _wasdLoop() {
   }
 }
 
-// Accumulated zoom for the current rAF frame — batches rapid wheel events
-// (e.g. trackpad pinch) into a single draw call instead of one per event.
-let _zoomAccum = 0;
-let _zoomOrigin = null;
-let _zoomRaf = null;
-
-function _flushZoom() {
-  _zoomRaf = null;
-  if (_zoomAccum === 0 || !_zoomOrigin) return;
-  zoomAt(_zoomOrigin, Math.exp(_zoomAccum));
-  _zoomAccum = 0;
-  _zoomOrigin = null;
-  draw();
-}
-
 cv.addEventListener('wheel', e => {
   if (modal.classList.contains('show')) return;
   e.preventDefault();
@@ -1904,10 +1889,8 @@ cv.addEventListener('wheel', e => {
   }
 
   if (isZoomGesture) {
-    // Batch all zoom events that land in the same frame into one draw call
-    _zoomAccum += -delta.y * WHEEL_ZOOM_SENSITIVITY;
-    _zoomOrigin = p;
-    if (!_zoomRaf) _zoomRaf = requestAnimationFrame(_flushZoom);
+    zoomAt(p, Math.exp(-delta.y * WHEEL_ZOOM_SENSITIVITY));
+    if (!cv._zoomRaf) cv._zoomRaf = requestAnimationFrame(() => { cv._zoomRaf = null; draw(); });
   } else {
     px -= delta.x;
     py -= delta.y;
